@@ -1,0 +1,16 @@
+{
+  "name": "com.lostsignal.lostperformance",
+  "displayName": "Lost Performance",
+  "version": "0.1.0",
+  "unity": "2021.1",
+  "description": "A collection of performance related code.",
+  "keywords": [
+    "Lost",
+	"Performace",
+	"Mesh Combine"
+  ],
+  "category": "",
+  "dependencies": {
+  },
+  "type": "library"
+}

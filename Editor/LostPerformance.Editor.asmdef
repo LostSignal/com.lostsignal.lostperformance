@@ -1,0 +1,20 @@
+{
+    "name": "LostPerformance.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:8e683a3d6d1f7a74da811ef5727a2526",
+        "GUID:9c9eac44720c8e148964962a0bc81f19",
+        "GUID:79e4da52ef2437c48a13a0d9e269b469"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

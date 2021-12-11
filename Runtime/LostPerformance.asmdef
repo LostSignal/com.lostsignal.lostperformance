@@ -1,0 +1,17 @@
+{
+    "name": "LostPerformance",
+    "rootNamespace": "",
+    "references": [
+        "GUID:8e683a3d6d1f7a74da811ef5727a2526",
+        "GUID:77ccaf49895b0d64e87cd4b4faf83c49"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
