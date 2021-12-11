@@ -73,7 +73,7 @@ namespace Lost
             // TODO [bgish]: Delete BoxColliders parent GameObject
             // TODO [bgish]: Delete MeshColliders parent GameObject
 
-            this.combinedMeshColliders.ForEach(x => x.enabled = true);
+            this.combinedMeshRenderers.ForEach(x => x.enabled = true);
             this.combinedBoxColliders.ForEach(x => x.enabled = true);
             this.combinedMeshColliders.ForEach(x => x.enabled = true);
 
