@@ -1,5 +1,5 @@
 ﻿//-----------------------------------------------------------------------
-// <copyright file="MeshCombineVolume.cs" company="Lost Signal LLC">
+// <copyright file="VolumeOptimizer.cs" company="Lost Signal LLC">
 //     Copyright (c) Lost Signal LLC. All rights reserved.
 // </copyright>
 //-----------------------------------------------------------------------
@@ -10,18 +10,18 @@ namespace Lost
     using System.Linq;
     using UnityEngine;
 
-    public class MeshCombineList : MeshCombiner
+    public class VolumeOptimizer : MonoBehaviour
     {
         #pragma warning disable 0649
         [SerializeField] private List<MeshRenderer> meshRenderers;
         #pragma warning restore 0649
-
+    
         public void SetList(List<MeshRenderer> meshRendereers)
         {
             this.meshRenderers = meshRendereers;
         }
-
-        public override List<GameObject> GetGameObjectsToCombine(int lodLevel)
+    
+        public List<GameObject> GetGameObjectsToCombine(int lodLevel)
         {
             return this.meshRenderers.Select(x => x.gameObject).ToList();
         }

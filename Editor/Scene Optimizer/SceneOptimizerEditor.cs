@@ -13,12 +13,12 @@ namespace Lost
     //// TODO [bgish]: Add button to toggle gizmo for this class on/off
     //// TODO [bgish]: Update Gizmo to be transparent boxes with the color being green to red based on tri count
 
-    [CustomEditor(typeof(MeshCombineManager), true)]
+    [CustomEditor(typeof(SceneOptimizer), true)]
     public class MeshCombineManagerEditor : Editor
     {
         private string meshRendererCountText;
 
-        public MeshCombineManager MeshCombineManager => (MeshCombineManager)this.target;
+        public SceneOptimizer SceneOptimizer => (SceneOptimizer)this.target;
 
         //// TODO [bgish]: Add setting for now combining MeshCombineChildren if size > X
         //// TODO [bgish]: How should we handle making LODS for volumes when it has objects that already have LODS?  Should
@@ -34,35 +34,35 @@ namespace Lost
 
             if (GUILayout.Button("Calculate Octree Volumes"))
             {
-                this.MeshCombineManager.CalculateOctree();
+                this.SceneOptimizer.CalculateOctree();
                 SceneView.RepaintAll();
                 this.UpdateMeshRendererCount();
             }
 
             if (GUILayout.Button("Generate MeshCombineVolume Meshes"))
             {
-                this.MeshCombineManager.GenerateVolumesMeshCombine();
+                this.SceneOptimizer.GenerateVolumesMeshCombine();
                 this.UpdateMeshRendererCount();
             }
 
             if (GUILayout.Button("Delete MeshCombineVolume Meshes"))
             {
-                this.MeshCombineManager.DeleteVolumesMeshCombine();
+                this.SceneOptimizer.DeleteVolumesMeshCombine();
                 this.UpdateMeshRendererCount();
             }
 
-            GUILayout.Label("Mesh Combine Children");
-
-            if (GUILayout.Button("Build MeshCombine Children LOD0"))
-            {
-                foreach (var meshCombineChildren in GameObject.FindObjectsOfType<MeshCombineChildren>())
-                {
-                    meshCombineChildren.CreateLOD(0);
-                }
-
-                this.UpdateMeshRendererCount();
-            }
-
+            //// GUILayout.Label("Mesh Combine Children");
+            //// 
+            //// if (GUILayout.Button("Build MeshCombine Children LOD0"))
+            //// {
+            ////     foreach (var meshCombineChildren in GameObject.FindObjectsOfType<MeshCombineChildren>())
+            ////     {
+            ////         meshCombineChildren.CreateLOD(0);
+            ////     }
+            //// 
+            ////     this.UpdateMeshRendererCount();
+            //// }
+            //// 
             //// if (GUILayout.Button("Split up meshes by material"))
             //// {
             ////     foreach (var meshCombiner in GameObject.FindObjectsOfType<MeshCombiner>())

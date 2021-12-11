@@ -1,5 +1,5 @@
 ﻿//-----------------------------------------------------------------------
-// <copyright file="IgnoreMeshCombine.cs" company="Lost Signal LLC">
+// <copyright file="ObjectOptimizerIgnore.cs" company="Lost Signal LLC">
 //     Copyright (c) Lost Signal LLC. All rights reserved.
 // </copyright>
 //-----------------------------------------------------------------------
@@ -22,7 +22,7 @@ namespace Lost
         LOD9AndAbove = 2,
     }
 
-    public class IgnoreMeshCombine : MonoBehaviour
+    public class ObjectOptimizerIgnore : MonoBehaviour
     {
         [SerializeField] private IgnoreLOD ignoreLevel;
 
