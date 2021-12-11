@@ -34,8 +34,13 @@ namespace Lost
 
             // TODO [bgish]: Collect Box Colliders
             // TODO [bgish]: Collect Mesh Colliders
-            // TODO [bgish]: Create LODS parent GameObject
 
+            // Creating all LODs
+            for (int i = 0; i < this.settings.LODSettings.Count; i++)
+            {
+                MeshCombiner.CreateLOD(this.combinedMeshRenderers, i, this.transform);
+            }
+            
             this.isOptimized = true;
 
             this.combinedMeshColliders.ForEach(x => x.enabled = false);
@@ -61,6 +66,9 @@ namespace Lost
 
         public void Revert()
         {
+            // Destroying LODs
+            MeshCombiner.DestoryLODs(this.transform);
+
             // TODO [bgish]: Delete LODS parent GameObject
             // TODO [bgish]: Delete BoxColliders parent GameObject
             // TODO [bgish]: Delete MeshColliders parent GameObject
