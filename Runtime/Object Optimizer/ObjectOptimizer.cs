@@ -14,7 +14,7 @@ namespace Lost
     public class ObjectOptimizer : MonoBehaviour
     {
         #pragma warning disable 0649
-        [SerializeField] private ObjectOptimizerSettings settings;
+        [SerializeField] private OptimizerSettings settings;
         
         [ReadOnly] [SerializeField] private bool isOptimized;
         [ReadOnly] [SerializeField] private List<MeshRenderer> combinedMeshRenderers;
@@ -25,47 +25,40 @@ namespace Lost
 
         public bool IsOptimized => this.isOptimized;
 
-        public ObjectOptimizerSettings Settings => this.settings;
+        public OptimizerSettings Settings => this.settings;
 
         public void Optimize()
         {
+            if (this.isOptimized)
+            {
+                this.Revert();
+            }
+
+            this.isOptimized = true;
+
+            // Collecting and merging MeshRenderers
             this.combinedMeshRenderers = this.GetMeshRenderersToCombine(0);
             this.combinedMeshFilters = this.combinedMeshRenderers.Select(x => x.GetComponent<MeshFilter>()).ToList();
+            MeshCombiner.CreateLODs(this.transform, this.settings.LODSettings, this.combinedMeshRenderers, generateLODGroup: true);
 
             // TODO [bgish]: Collect Box Colliders
-            // TODO [bgish]: Collect Mesh Colliders
+            // TODO [bgish]: Optimize Box Colliders
 
-            // Creating all LODs
-            for (int i = 0; i < this.settings.LODSettings.Count; i++)
-            {
-                MeshCombiner.CreateLOD(this.combinedMeshRenderers, i, this.transform);
-            }
-            
-            this.isOptimized = true;
+            // TODO [bgish]: Collect Mesh Colliders
+            // TODO [bgish]: Optimize Mesh Colliders
 
             this.combinedMeshColliders.ForEach(x => x.enabled = false);
             this.combinedBoxColliders.ForEach(x => x.enabled = false);
             this.combinedMeshColliders.ForEach(x => x.enabled = false);
         }
 
-        public List<MeshRenderer> GetMeshRenderersToCombine(int lodLevel)
-        {
-            return this.GetComponentsInChildren<MeshRenderer>(true)
-                .Where((x) =>
-                {
-                    var meshFilter = x.GetComponent<MeshFilter>();
-                    var ignore = x.GetComponentInParent<ObjectOptimizerIgnore>();
-
-                    bool isMeshFilterValid = meshFilter != null && meshFilter.sharedMesh != null;
-                    bool isIgnoreValid = ignore == null || lodLevel < (int)ignore.IgnoreLOD;
-
-                    return isMeshFilterValid && isIgnoreValid;
-                })
-                .ToList();
-        }
-
         public void Revert()
         {
+            if (this.isOptimized == false)
+            {
+                return;
+            }
+
             // Destroying LODs
             MeshCombiner.DestoryLODs(this.transform);
 
@@ -99,6 +92,7 @@ namespace Lost
             }
         }
 
+        #if UNITY_EDITOR
         private void Awake()
         {
             if (Application.isPlaying)
@@ -106,6 +100,7 @@ namespace Lost
                 this.CleanUp();
             }
         }
+        #endif
 
         private void OnValidate()
         {
@@ -130,11 +125,27 @@ namespace Lost
             }
         }
 
+        private List<MeshRenderer> GetMeshRenderersToCombine(int lodLevel)
+        {
+            return this.GetComponentsInChildren<MeshRenderer>(true)
+                .Where((x) =>
+                {
+                    var meshFilter = x.GetComponent<MeshFilter>();
+                    var ignore = x.GetComponentInParent<ObjectOptimizerIgnore>();
+
+                    bool isMeshFilterValid = meshFilter != null && meshFilter.sharedMesh != null;
+                    bool isIgnoreValid = ignore == null || lodLevel < (int)ignore.IgnoreLOD;
+
+                    return isMeshFilterValid && isIgnoreValid;
+                })
+                .ToList();
+        }
+
         private void CleanUp(bool unpackPrefabsCompletely = false)
         {
             if (this.isOptimized == false)
             {
-
+                return;
             }
 
             #if UNITY_EDITOR
@@ -159,7 +170,7 @@ namespace Lost
             this.combinedBoxColliders = null;
             this.combinedMeshColliders = null;
 
-            DeleteEmptyGameObjects();
+            DeleteEmptyOrDisabledGameObjects(this.transform);
             Destroy(this);
 
             void Destory(Component component)
@@ -174,102 +185,21 @@ namespace Lost
                 }
             }
 
-            void DeleteEmptyGameObjects()
+            void DeleteEmptyOrDisabledGameObjects(Transform childTransform, bool isRoot = true)
             {
-                // TODO [bgish]: Go through every child game object and if it has only 1 transform component and no children
-                //               then delete it, also if it is just disabled, then delete it.
-            }
-        }
-
-        public List<GameObject> testObjects;
-
-        #if UNITY_EDITOR
-
-        public void Test()
-        {
-            // if so, initialize Simplygon
-            using (Simplygon.ISimplygon simplygon = global::Simplygon.Loader.InitSimplygon(out Simplygon.EErrorCodes simplygonErrorCode, out string simplygonErrorMessage))
-            {
-                simplygon.SetGlobalEnableLogSetting(true);
-                simplygon.SetGlobalLogToFileSetting(true);
-                simplygon.SetThreadLocalLogFileNameSetting(@"C:\Users\User\Desktop\Simplygon.txt");
-
-                // if Simplygon handle is valid, loop all selected objects
-                // and call Reduce function.
-                if (simplygonErrorCode == Simplygon.EErrorCodes.NoError)
+                for (int i = 0; i < childTransform.childCount; i++)
                 {
-                    this.ReduceTest(simplygon, 0.5f);
+                    DeleteEmptyOrDisabledGameObjects(childTransform.GetChild(i), false);
                 }
 
-                // if invalid handle, output error message to the Unity console
-                else
+                bool isNotActive = childTransform.gameObject.activeInHierarchy == false;
+                bool hasNoComponents = childTransform.GetComponentsInChildren<Component>().Length == 1;
+
+                if (isRoot == false && (isNotActive || hasNoComponents))
                 {
-                    Debug.Log("Initializing failed!");
+                    GameObject.DestroyImmediate(childTransform);
                 }
             }
         }
-
-        public void ReduceTest(Simplygon.ISimplygon simplygon, float quality)
-        {
-            string exportTempDirectory = Simplygon.Unity.EditorPlugin.SimplygonUtils.GetNewTempDirectory();
-            Debug.Log(exportTempDirectory);
-
-            using (Simplygon.spScene sgScene = Simplygon.Unity.EditorPlugin.SimplygonExporter.Export(simplygon, exportTempDirectory, this.testObjects))
-            {
-                using (Simplygon.spReductionPipeline reductionPipeline = simplygon.CreateReductionPipeline())
-                using (Simplygon.spReductionSettings reductionSettings = reductionPipeline.GetReductionSettings())
-                {
-                    reductionSettings.SetReductionTargets(Simplygon.EStopCondition.All, true, false, false, false);
-                    reductionSettings.SetReductionTargetTriangleRatio(quality);
-                    reductionPipeline.RunScene(sgScene, Simplygon.EPipelineRunMode.RunInThisProcess);
-
-                    string folderName = "Simplygon Temp Assets";
-                    string baseFolder = $"Assets/{folderName}";
-                    
-                    if (UnityEditor.AssetDatabase.IsValidFolder(baseFolder) == false)
-                    {
-                        UnityEditor.AssetDatabase.CreateFolder("Assets", folderName);
-                    }
-
-                    string assetFolderGuid = UnityEditor.AssetDatabase.CreateFolder(baseFolder, gameObject.name);
-                    string assetFolderPath = UnityEditor.AssetDatabase.GUIDToAssetPath(assetFolderGuid);
-
-                    List<GameObject> importedGameObjects = new List<GameObject>();
-                    int startingLodIndex = 0;
-                    Simplygon.Unity.EditorPlugin.SimplygonImporter.Import(simplygon, reductionPipeline, ref startingLodIndex, assetFolderPath, gameObject.name, importedGameObjects);
-
-                    int count = importedGameObjects.Count;
-                    for (int i = 0; i < count; i++)
-                    {
-                        Debug.Log($"{(i+1)} of {count}: " + importedGameObjects[i].name);
-                    }
-                    
-                    // if (importedGameObjects.Count > 0)
-                    // {
-                    //     var importedMeshFilter = importedGameObjects[0].GetComponent<MeshFilter>();
-                    // 
-                    //     if (importedMeshFilter != null)
-                    //     {
-                    //         var assetPath = AssetDatabase.GetAssetPath(importedMeshFilter.sharedMesh);
-                    //         var newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(assetPath);
-                    //         var meshCopy = GameObject.Instantiate(newMesh);
-                    // 
-                    //         EditorApplication.delayCall += () =>
-                    //         {
-                    //             originalMeshFilter.sharedMesh = meshCopy;
-                    //             EditorUtility.SetDirty(originalMeshFilter.gameObject);
-                    //         };
-                    //     }
-                    // }
-                    // 
-                    // foreach (var importedObject in importedGameObjects)
-                    // {
-                    //     GameObject.DestroyImmediate(importedObject);
-                    // }
-                }
-            }
-        }
-
-        #endif
     }
 }

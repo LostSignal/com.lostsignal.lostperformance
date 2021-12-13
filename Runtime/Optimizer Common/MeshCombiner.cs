@@ -4,11 +4,9 @@
 // </copyright>
 //-----------------------------------------------------------------------
 
-
-// TODO [bgish]: Track all mesh renders that have been combined and on build, delete them and remove reference
-// TODO [bgish]: Add check box to delete empty game objects as well
-
-// TODO [bgish]: Make sure we also clean up the temp directory after done importing simplygon assets
+//// TODO [bgish]: Track all mesh renders that have been combined and on build, delete them and remove reference
+//// TODO [bgish]: Add check box to delete empty game objects as well
+//// TODO [bgish]: Make sure we also clean up the temp directory after done importing simplygon assets
 
 namespace Lost
 {
@@ -17,17 +15,80 @@ namespace Lost
     using System.Linq;
     using UnityEngine;
 
-    ////
-    //// Took a lot of inspiration from this blog post http://projectperko.blogspot.com/2016/08/multi-material-mesh-merge-snippet.html
-    ////
-
     public static class MeshCombiner
     {
-        public static void CreateLOD(List<MeshRenderer> meshRenderersToCombine, int lodIndex, Transform transform)
+        public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRenderer> meshRenderersToCombine, bool generateLODGroup)
         {
-            var lodTransform = GetLODTransform(transform, lodIndex);
-            var finalMeshFilter = lodTransform.gameObject.GetOrAddComponent<MeshFilter>();
-            var finalMeshRenderer = lodTransform.gameObject.GetOrAddComponent<MeshRenderer>();
+            // Making sure no old LODs are sitting around
+            var lods = GetLODSTransform(transform, true);
+            lods.DestroyAllChildren();
+
+            if (lodSettings.Count == 0)
+            {
+                return;
+            }
+
+            // Creating LOD0
+            var lod0 = new GameObject(lodSettings[0].Name, typeof(MeshFilter), typeof(MeshRenderer)).transform;
+            var lod0Transform = lod0.transform;
+            lod0Transform.SetParent(lods);
+            lod0Transform.Reset();
+            CreateCombinedMeshGameObject(lod0Transform, meshRenderersToCombine);
+            
+            // Making remaining LODs by copying LOD0
+            for (int i = 1; i < lodSettings.Count; i++)
+            {
+                var newLOD = GameObject.Instantiate(lod0, lods);
+                newLOD.name = lodSettings[i].Name;
+                newLOD.transform.SetParent(lods);
+                newLOD.transform.Reset();
+            }
+
+            if (generateLODGroup)
+            {
+                GenerateLODGroup(transform, lodSettings);
+            }
+        }
+
+        public static void DestoryLODs(Transform transform)
+        {
+            var lodsTransform = GetLODSTransform(transform, false);
+            
+            if (lodsTransform != null)
+            {
+                lodsTransform.DestroyAllChildren();
+            }
+        }
+        
+        private static void GenerateLODGroup(Transform transform, List<LODSetting> lodSettings)
+        {
+            var lodsTransform = GetLODSTransform(transform, true);
+            var lods = new List<LOD>();
+
+            for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
+            {
+                lods.Add(new LOD
+                {
+                    screenRelativeTransitionHeight = lodSettings[lodIndex].ScreenPercentage,
+                    renderers = GetLODTransform(lodSettings, transform, lodIndex).GetComponentsInChildren<MeshRenderer>().ToArray(),
+                });
+            }
+
+            var lodGroup = lodsTransform.gameObject.GetOrAddComponent<LODGroup>();
+            lodGroup.SetLODs(lods.ToArray());
+
+            #if UNITY_EDITOR
+            UnityEditor.EditorUtility.SetDirty(lodsTransform.gameObject);
+            #endif
+        }
+
+        ////
+        //// Took a lot of inspiration from this blog post http://projectperko.blogspot.com/2016/08/multi-material-mesh-merge-snippet.html
+        ////
+        private static void CreateCombinedMeshGameObject(Transform transform, List<MeshRenderer> meshRenderersToCombine)
+        {
+            var finalMeshFilter = transform.gameObject.GetOrAddComponent<MeshFilter>();
+            var finalMeshRenderer = transform.gameObject.GetOrAddComponent<MeshRenderer>();
 
             var meshRenderers = meshRenderersToCombine;
             var meshFilters = meshRenderersToCombine.Select(x => x.gameObject.GetComponent<MeshFilter>()).ToList();
@@ -71,7 +132,7 @@ namespace Lost
                         {
                             mesh = meshFilter.sharedMesh,
                             subMeshIndex = materialIndex,
-                            transform = lodTransform.worldToLocalMatrix * meshRenderer.transform.localToWorldMatrix,
+                            transform = transform.worldToLocalMatrix * meshRenderer.transform.localToWorldMatrix,
                         });
                     }
                 }
@@ -118,38 +179,36 @@ namespace Lost
 #endif
         }
 
-        public static void DestoryLODs(Transform transform)
+        private static Transform GetLODSTransform(Transform transform, bool createIfDoesNotExist)
         {
-            var lodsTransform = GetLODSTransform(transform, false);
+            var lods = transform.Find("LODS");
 
-            if (lodsTransform != null)
+            if (lods == null && createIfDoesNotExist)
             {
-                if (Application.isPlaying)
-                {
-                    GameObject.Destroy(lodsTransform.gameObject);
-                }
-                else
-                {
-                    GameObject.DestroyImmediate(lodsTransform.gameObject);
-                }
+                lods = new GameObject("LODS").transform;
+                lods.SetParent(transform);
+                lods.Reset();
             }
+
+            return lods;
         }
 
-        //// public void Revert()
-        //// {
-        ////     foreach (var combinedGameObject in this.combinedGameObjects)
-        ////     {
-        ////         combinedGameObject.GetComponent<MeshRenderer>().enabled = true;
-        ////     }
-        //// 
-        ////     this.combinedGameObjects.Clear();
-        ////     var lods = this.transform.Find("LODS");
-        //// 
-        ////     if (lods != null)
-        ////     {
-        ////         GameObject.DestroyImmediate(lods.gameObject);
-        ////     }
-        //// }
+        private static Transform GetLODTransform(List<LODSetting> settings, Transform transform, int lodIndex)
+        {
+            var lodsTransform = GetLODSTransform(transform, true);
+            var lodName = settings[lodIndex].Name;
+            var lod = transform.Find($"LODS/{lodName}");
+
+            if (lod == null)
+            {
+                lod = new GameObject(lodName).transform;
+                lod.SetParent(lodsTransform);
+                lod.SetSiblingIndex(lodIndex);
+                lod.Reset();
+            }
+
+            return lod;
+        }
 
         //// public void SimplifyLODMesh(int lodIndex)
         //// {
@@ -180,7 +239,7 @@ namespace Lost
         ////         }
         ////     }
         //// }
-
+        ////
         //// private Mesh CreateNewMesh(ObjectOptimizerSettings.LODSetting lodSettings, MeshFilter meshFilter)
         //// {
         ////     #if UNITY_EDITOR
@@ -231,69 +290,7 @@ namespace Lost
         //// 
         ////     #endif
         //// }
-        //// 
-        //// #if UNITY_EDITOR
-        //// 
-        //// public static void Reduce(MeshFilter originalMeshFilter, Simplygon.ISimplygon simplygon, float quality)
-        //// {
-        ////     var gameObject = originalMeshFilter.gameObject;
-        ////     List<GameObject> selectedGameObjects = new List<GameObject>();
-        ////     selectedGameObjects.Add(gameObject);
-        //// 
-        ////     string exportTempDirectory = Simplygon.Unity.EditorPlugin.SimplygonUtils.GetNewTempDirectory();
-        ////     Debug.Log(exportTempDirectory);
-        //// 
-        ////     using (Simplygon.spScene sgScene = Simplygon.Unity.EditorPlugin.SimplygonExporter.Export(simplygon, exportTempDirectory, selectedGameObjects))
-        ////     {
-        ////         using (Simplygon.spReductionPipeline reductionPipeline = simplygon.CreateReductionPipeline())
-        ////         using (Simplygon.spReductionSettings reductionSettings = reductionPipeline.GetReductionSettings())
-        ////         {
-        ////             reductionSettings.SetReductionTargets(Simplygon.EStopCondition.All, true, false, false, false);
-        ////             reductionSettings.SetReductionTargetTriangleRatio(quality);
-        //// 
-        ////             reductionPipeline.RunScene(sgScene, Simplygon.EPipelineRunMode.RunInThisProcess);
-        //// 
-        ////             string baseFolder = "Assets/SimpleReductions";
-        ////             if (UnityEditor.AssetDatabase.IsValidFolder(baseFolder) == false)
-        ////             {
-        ////                 UnityEditor.AssetDatabase.CreateFolder("Assets", "SimpleReductions");
-        ////             }
-        //// 
-        ////             string assetFolderGuid = UnityEditor.AssetDatabase.CreateFolder(baseFolder, gameObject.name);
-        ////             string assetFolderPath = UnityEditor.AssetDatabase.GUIDToAssetPath(assetFolderGuid);
-        //// 
-        ////             List<GameObject> importedGameObjects = new List<GameObject>();
-        ////             int startingLodIndex = 0;
-        ////             Simplygon.Unity.EditorPlugin.SimplygonImporter.Import(simplygon, reductionPipeline, ref startingLodIndex, assetFolderPath, gameObject.name, importedGameObjects);
-        //// 
-        ////             if (importedGameObjects.Count > 0)
-        ////             {
-        ////                 var importedMeshFilter = importedGameObjects[0].GetComponent<MeshFilter>();
-        //// 
-        ////                 if (importedMeshFilter != null && importedMeshFilter.sharedMesh != null)
-        ////                 {
-        ////                     var assetPath = UnityEditor.AssetDatabase.GetAssetPath(importedMeshFilter.sharedMesh);
-        ////                     var newMesh = UnityEditor.AssetDatabase.LoadAssetAtPath<Mesh>(assetPath);
-        ////                     var meshCopy = GameObject.Instantiate(newMesh);
-        //// 
-        ////                     UnityEditor.EditorApplication.delayCall += () =>
-        ////                     {
-        ////                         originalMeshFilter.sharedMesh = meshCopy;
-        ////                         UnityEditor.EditorUtility.SetDirty(originalMeshFilter.gameObject);
-        ////                     };                            
-        ////                 }
-        ////             }
-        //// 
-        ////             foreach (var importedObject in importedGameObjects)
-        ////             {
-        ////                 GameObject.DestroyImmediate(importedObject);
-        ////             }
-        ////         }
-        ////     }
-        //// }
-        //// 
-        //// #endif
-
+        ////
         //// public void SeperateMesh(int lodIndex)
         //// {
         ////     if (lodIndex >= this.lodSettings.Count)
@@ -350,58 +347,5 @@ namespace Lost
         ////     GameObject.DestroyImmediate(originalMeshRenderer);
         ////     GameObject.DestroyImmediate(originalMeshFilter);
         //// }
-        //// 
-        //// public void GenerateLODGroup()
-        //// {
-        ////     var lods = new List<LOD>();
-        //// 
-        ////     for (int lodIndex = 0; lodIndex < this.lodSettings.Count; lodIndex++)
-        ////     {
-        ////         lods.Add(new LOD
-        ////         {
-        ////             screenRelativeTransitionHeight = this.lodSettings[lodIndex].ScreenPercentage,
-        ////             renderers = this.GetLODTransform(lodIndex).GetComponentsInChildren<MeshRenderer>().ToArray(),
-        ////         });
-        ////     }
-        //// 
-        ////     var lodGroup = this.GetLODSTransform().gameObject.GetOrAddComponent<LODGroup>();
-        ////     lodGroup.SetLODs(lods.ToArray());
-        //// 
-        ////     #if UNITY_EDITOR
-        ////     UnityEditor.EditorUtility.SetDirty(this.gameObject);
-        ////     #endif
-        //// }
-
-        private static Transform GetLODSTransform(Transform transform, bool createDoesNotExist)
-        {
-            var lods = transform.Find("LODS");
-
-            if (lods == null && createDoesNotExist)
-            {
-                lods = new GameObject("LODS").transform;
-                lods.SetParent(transform);
-                lods.Reset();
-            }
-
-            return lods;
-        }
-
-        private static Transform GetLODTransform(Transform transform, int lodIndex)
-        {
-            var lodsTransform = GetLODSTransform(transform, true);
-            var lodName = $"LOD{lodIndex}"; // this.lodSettings[lodIndex].Name;
-            var lod = transform.Find($"LODS/{lodName}");
-
-            if (lod == null)
-            {
-                lod = new GameObject(lodName).transform;
-                lod.SetParent(lodsTransform);
-                lod.SetSiblingIndex(lodIndex);
-                lod.Reset();
-            }
-
-            return lod;
-        }
-
     }
 }
