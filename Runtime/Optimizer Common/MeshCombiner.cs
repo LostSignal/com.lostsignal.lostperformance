@@ -17,6 +17,36 @@ namespace Lost
 
     public static class MeshCombiner
     {
+        public static void DeleteEmptyOrDisabledGameObjects(Transform childTransform, bool isRoot = true)
+        {
+            for (int i = 0; i < childTransform.childCount; i++)
+            {
+                DeleteEmptyOrDisabledGameObjects(childTransform.GetChild(i), false);
+            }
+
+            // Determining if we have an unused LODGroup
+            var lodGroup = childTransform.GetComponent<LODGroup>();
+
+            if (lodGroup != null && lodGroup.enabled == false)
+            {
+                GameObject.DestroyImmediate(lodGroup);
+            }
+
+            Component[] components = childTransform.GetComponentsInChildren<Component>();
+            bool hasNoComponents = components.Length == 1;
+            bool isNotActive = childTransform.gameObject.activeInHierarchy == false;
+
+            if (childTransform.name == "LOD1")
+            {
+                Debug.Log("LOD1", childTransform);
+            }
+
+            if (isRoot == false && (isNotActive || hasNoComponents))
+            {
+                GameObject.DestroyImmediate(childTransform.gameObject);
+            }
+        }
+
         public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRendererInfo> meshRendererInfos, bool generateLODGroup)
         {
             // Making sure no old LODs are sitting around
@@ -39,6 +69,9 @@ namespace Lost
 
                 CreateCombinedMeshGameObject(newLOD.transform, meshRendererInfos, lodIndex);
             }
+
+            // Disabling all affected LODGroups
+            UpdateLODGroups(meshRendererInfos, false);
 
             if (generateLODGroup)
             {
@@ -72,6 +105,7 @@ namespace Lost
         {
             var lodsTransform = GetLODSTransform(transform, false);
             
+            // Destroying LOD Transforms
             if (lodsTransform != null)
             {
                 if (Application.isPlaying == false)
@@ -84,15 +118,14 @@ namespace Lost
                 }
             }
 
+            // Enabling all turned off MeshRenderers
             foreach (var meshRendererInfo in meshRendererInfos)
             {
                 meshRendererInfo.MeshRenderer.enabled = true;
-                
-                if (meshRendererInfo.LodGroup != null)
-                {
-                    meshRendererInfo.LodGroup.enabled = true;
-                }
             }
+
+            // Enabling all turned off LODGroups
+            UpdateLODGroups(meshRendererInfos, true);
         }
 
         public static Transform GetLODTransform(List<LODSetting> settings, Transform transform, int lodIndex)
@@ -155,7 +188,6 @@ namespace Lost
 
             var meshRenderers = meshRendererInfos.Select(x => x.MeshRenderer).ToList();
             var meshFilters = meshRendererInfos.Select(x => x.MeshFilter).ToList();
-            var lodGroups = meshRendererInfos.Where(x => x.LodGroup != null).Select(x => x.LodGroup).Distinct().ToList();
             var materials = new List<Material>();
 
             // Making sure our arrays are value
@@ -230,12 +262,6 @@ namespace Lost
                 meshRenderers[i].enabled = false;
             }
 
-            // Disabling all the LODGroups
-            for (int i = 0; i < lodGroups.Count; i++)
-            {
-                lodGroups[i].enabled = false;
-            }
-
             var finalMesh = new Mesh();
             finalMesh.indexFormat = vertCount >= ushort.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             finalMesh.CombineMeshes(finalCombiners.ToArray(), false);
@@ -248,8 +274,6 @@ namespace Lost
             UnityEditor.EditorUtility.SetDirty(finalMeshRenderer.gameObject);
             #endif
         }
-
-
 
         private static Transform GetLODSTransform(Transform transform, bool createIfDoesNotExist)
         {
@@ -265,7 +289,26 @@ namespace Lost
             return lods;
         }
 
-        
+        private static void UpdateLODGroups(List<MeshRendererInfo> meshRendererInfos, bool enable)
+        {
+            foreach (var lodGroup in meshRendererInfos.Where(x => x.LodGroup != null && x.IsIgnored == false).Select(x => x.LodGroup).Distinct())
+            {
+                lodGroup.enabled = enable;
+
+                var lods = lodGroup.GetLODs();
+
+                for (int j = 0; j < lods.Length; j++)
+                {
+                    Array.ForEach(lods[j].renderers, x =>
+                    {
+                        if (x is MeshRenderer)
+                        {
+                            x.enabled = enable;
+                        }
+                    });
+                }
+            }
+        }
 
         //// private static Mesh CreateNewMesh(OptimizerSettings settings, MeshFilter meshFilter)
         //// {

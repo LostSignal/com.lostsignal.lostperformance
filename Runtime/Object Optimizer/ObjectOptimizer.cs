@@ -14,7 +14,7 @@ namespace Lost
     public class ObjectOptimizer : MonoBehaviour
     {
         #pragma warning disable 0649
-        [SerializeField] private OptimizerSettings settings;
+        [SerializeField] private ObjectOptimizerSettings settings;
         
         [ReadOnly] [SerializeField] private bool isOptimized;
         [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos;
@@ -113,6 +113,12 @@ namespace Lost
             {
                 this.combinedMeshColliders = new List<MeshCollider>();
             }
+
+            if (this.settings == null)
+            {
+                // TODO [bgish]: Get the default settings from project settings, not hard coded
+                this.settings = EditorUtil.GetAssetByGuid<ObjectOptimizerSettings>("9026b0cfb0d3e9a4d95fd0c8697ec701");
+            }
         }
 
         private void CleanUp(bool unpackPrefabsCompletely = false)
@@ -129,31 +135,21 @@ namespace Lost
             }
             #endif
 
-            this.meshRendererInfos.ForEach(x => GameObject.DestroyImmediate(x.MeshRenderer));
-            this.meshRendererInfos.ForEach(x => GameObject.DestroyImmediate(x.MeshFilter));
+            foreach (var meshRendererInfo in this.meshRendererInfos)
+            {
+                if (meshRendererInfo.IsIgnored == false)
+                {
+                    GameObject.DestroyImmediate(meshRendererInfo.MeshRenderer);
+                    GameObject.DestroyImmediate(meshRendererInfo.MeshFilter);
+                }
+            }
+
             this.combinedBoxColliders.ForEach(x => GameObject.DestroyImmediate(x));
             this.combinedMeshColliders.ForEach(x => GameObject.DestroyImmediate(x));
 
-            //// TODO [bgish]: Make sure to handle destorying any disabled LODGroup components
+            MeshCombiner.DeleteEmptyOrDisabledGameObjects(this.transform);
 
-            DeleteEmptyOrDisabledGameObjects(this.transform);
             Destroy(this);
-
-            void DeleteEmptyOrDisabledGameObjects(Transform childTransform, bool isRoot = true)
-            {
-                for (int i = 0; i < childTransform.childCount; i++)
-                {
-                    DeleteEmptyOrDisabledGameObjects(childTransform.GetChild(i), false);
-                }
-
-                bool isNotActive = childTransform.gameObject.activeInHierarchy == false;
-                bool hasNoComponents = childTransform.GetComponentsInChildren<Component>().Length == 1;
-
-                if (isRoot == false && (isNotActive || hasNoComponents))
-                {
-                    GameObject.DestroyImmediate(childTransform.gameObject);
-                }
-            }
         }
     }
 }

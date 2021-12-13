@@ -6,12 +6,11 @@
 
 namespace Lost
 {
-    using System.Collections.Generic;
     using System.Linq;
-    using Lost.EditorGrid;
     using UnityEditor;
     using UnityEngine;
 
+    [CanEditMultipleObjects]
     [CustomEditor(typeof(ObjectOptimizer))]
     public class ObjectOptimizerEditor : Editor
     {
@@ -32,6 +31,41 @@ namespace Lost
         {
             base.OnInspectorGUI();
 
+            if (this.targets?.Length > 1)
+            {
+                this.DrawMultiSelectUI();
+            }
+            else
+            {
+                this.DrawSingleSelectUI();
+            }
+        }
+
+        private void DrawMultiSelectUI()
+        {
+            if (GUILayout.Button("Optimize"))
+            {
+                foreach (var optimizer in this.targets.Cast<ObjectOptimizer>())
+                {
+                    optimizer.Optimize();
+                }
+
+                this.UpdateMeshRendererCount();
+            }
+
+            if (GUILayout.Button("Revert"))
+            {
+                foreach (var optimizer in this.targets.Cast<ObjectOptimizer>())
+                {
+                    optimizer.Revert();
+                }
+
+                this.UpdateMeshRendererCount();
+            }
+        }
+
+        private void DrawSingleSelectUI()
+        {
             var objectOptimizer = this.target as ObjectOptimizer;
 
             if (objectOptimizer.IsOptimized)
@@ -40,7 +74,7 @@ namespace Lost
                 {
                     objectOptimizer.Revert();
                     this.UpdateMeshRendererCount();
-                }   
+                }
 
                 GUILayout.Space(20);
 
@@ -51,7 +85,7 @@ namespace Lost
                     // setting.Simplifier == ObjectOptimizerSettings.LODSetting.MeshSimplifier.UnityMeshSimplifier
                     if (GUILayout.Button($"Calculate LOD{i}"))
                     {
-                        // 
+                        Debug.LogError("Not Implemented Yet");
                     }
                 }
             }
@@ -62,11 +96,6 @@ namespace Lost
                     objectOptimizer.Optimize();
                     this.UpdateMeshRendererCount();
                 }
-            }
-
-            if (objectOptimizer.IsOptimized)
-            {
-
             }
         }
 

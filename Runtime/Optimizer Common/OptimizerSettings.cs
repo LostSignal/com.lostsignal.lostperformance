@@ -9,16 +9,15 @@ namespace Lost
     using System.Collections.Generic;
     using UnityEngine;
 
-    [CreateAssetMenu(menuName = "Lost/Performance/Object Optimizer Settings")]
     public class OptimizerSettings : ScriptableObject
     {
-        #pragma warning disable 0649
+#pragma warning disable 0649
         [SerializeField] private List<LODSetting> lodSettings;
-        #pragma warning restore 0649
+#pragma warning restore 0649
 
         public List<LODSetting> LODSettings => this.lodSettings;
 
-        private void OnValidate()
+        protected virtual void OnValidate()
         {
             if (this.lodSettings == null || this.lodSettings.Count == 0)
             {

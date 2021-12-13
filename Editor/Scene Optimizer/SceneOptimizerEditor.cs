@@ -28,6 +28,8 @@ namespace Lost
         {
             base.OnInspectorGUI();
 
+            // TODO [bgish]: Add Dropdown for how to color the bound boxes in editor
+
             GUILayout.Space(10);
 
             GUILayout.Label("Mesh Combine Volumes");

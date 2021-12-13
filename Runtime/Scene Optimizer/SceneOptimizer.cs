@@ -10,36 +10,45 @@ namespace Lost
     using System.Collections.Generic;
     using System.Linq;
     using UnityEngine;
-    
+    using UnityEngine.SceneManagement;
+
     ////
     //// TODO [bgish]: Figure out what's better, have 1 mesh renderer with multiple materials, or multiple mesh renderers with 1 material
     ////               Make my Remote Method Call (RMC) tool with the ability to find all MeshCombiner scripts and collapse/expand
     ////
     //// TODO [bgish]: Go through eveIry octreeMeshRenderers after calculating and make sure they were assigned an OctreeVolumeIndex
     ////
-    
+
     public class SceneOptimizer : MonoBehaviour
     {
         #pragma warning disable 0649
-        [SerializeField] private OptimizerSettings optimizerSettings;
-        [SerializeField] private List<GameObject> meshRenderersGameObjects = new List<GameObject>();
-        [SerializeField] private List<OctreeVolume> octreeVolumes = new List<OctreeVolume>();
-        [SerializeField] private List<MeshRendererInfo> meshRendererInfos = new List<MeshRendererInfo>();
-        [SerializeField] private int maxTriangleCount = 150000;
-        [SerializeField] private float maxBoundsSize = 2000;
-        [SerializeField] private float minBoundsSize = 30;
-        [SerializeField] private Bounds octreeBounds;
-        #pragma warning restore 0649
+        [SerializeField] private SceneOptimizerSettings settings;
+        [SerializeField] private List<GameObject> objectOptimizationList = new List<GameObject>();
 
+        [Header("Editor Visuals Only")]
+        [SerializeField] private ColorBy colorBy;
+
+        [Header("Read Only")]
+        [ReadOnly] [SerializeField] private List<OctreeVolume> octreeVolumes = new List<OctreeVolume>();
+        [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos = new List<MeshRendererInfo>();
+        [ReadOnly] [SerializeField] private Bounds octreeBounds;
         [ReadOnly] [SerializeField] private Transform volumesTransform;
+        #pragma warning restore 0649
         
+        private enum ColorBy
+        {
+            None,
+            TriangleCount,
+            MeshRendererCount,
+        }
+
         public void CalculateOctree()
         {
             this.octreeVolumes.Clear();
             this.meshRendererInfos.Clear();
     
             DateTime startMeshRendererCollection = DateTime.Now;
-            this.meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(this.meshRenderersGameObjects);
+            this.meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(this.objectOptimizationList);
             DateTime endMeshRendererCollection = DateTime.Now;
             double meshCollctionInMillis = endMeshRendererCollection.Subtract(startMeshRendererCollection).TotalMilliseconds;
             Debug.Log($"Mesh Renderer Collection took {meshCollctionInMillis} milliseconds");
@@ -104,10 +113,58 @@ namespace Lost
                 volumeGameObject.transform.position = volume.CenterBounds.center;
                 volume.GameObject = volumeGameObject;
 
-                MeshCombiner.CreateLODs(volumeGameObject.transform, this.optimizerSettings.LODSettings, volume.MeshRendererInfos, true);
+                MeshCombiner.CreateLODs(
+                    volumeGameObject.transform, 
+                    this.settings.LODSettings, 
+                    volume.MeshRendererInfos, 
+                    false);
             }
         }
-    
+
+        public void CleanUp()
+        {
+            foreach (var volume in this.octreeVolumes)
+            {
+                foreach (var meshRendererInfo in volume.MeshRendererInfos)
+                {
+                    if (meshRendererInfo.IsIgnored == false)
+                    {
+                        GameObject.DestroyImmediate(meshRendererInfo.MeshRenderer);
+                        GameObject.DestroyImmediate(meshRendererInfo.MeshFilter);
+                    }
+                }
+            }
+
+            foreach (var gameObject in this.objectOptimizationList)
+            {
+                MeshCombiner.DeleteEmptyOrDisabledGameObjects(gameObject.transform);
+            }
+        }
+
+        [EditorEvents.OnProcessScene]
+        private static void CleanupSceneOptimizers(Scene scene)
+        {
+            if (Application.isEditor && Application.isPlaying == false && Application.isBatchMode && UnityEditor.BuildPipeline.isBuildingPlayer)
+            {
+                Debug.Log($"SceneOptimizer.CleanupSceneOptimizers({scene.name})");
+
+                foreach (var sceneOptimizer in GameObject.FindObjectsOfType<SceneOptimizer>().Where(x => x.gameObject.scene == scene))
+                {
+                    sceneOptimizer.CleanUp();
+                }
+            }
+        }
+
+        #if UNITY_EDITOR
+        private void Awake()
+        {
+            if (Application.isPlaying)
+            {
+                this.CleanUp();
+            }
+        }
+        #endif
+
         private void CalculateOctree(List<MeshRendererInfo> meshRendererInfos, Bounds bounds)
         {
             if (meshRendererInfos.Count == 0)
@@ -117,15 +174,15 @@ namespace Lost
     
             float boundsSize = GetBoundsSize(bounds);
     
-            if (boundsSize >= this.maxBoundsSize)
+            if (boundsSize >= this.settings.MaxVolumeBoundsSize)
             {
                 Split(meshRendererInfos, bounds);
             }
-            else if (boundsSize <= this.minBoundsSize)
+            else if (boundsSize <= this.settings.MinVolumeBoundsSize)
             {
                 AddOctreeVolume(meshRendererInfos, bounds);
             }
-            else if (meshRendererInfos.Sum(x => x.TriCount) > this.maxTriangleCount)
+            else if (meshRendererInfos.Sum(x => x.TriCount) > this.settings.MaxTrianglesPerVolume)
             {
                 Split(meshRendererInfos, bounds);
             }
@@ -246,10 +303,18 @@ namespace Lost
                 this.volumesTransform.SetParent(this.transform);
                 this.volumesTransform.Reset();
             }
+
+            if (this.settings == null)
+            {
+                // TODO [bgish]: Get the default settings from project settings, not hard coded
+                this.settings = EditorUtil.GetAssetByGuid<SceneOptimizerSettings>("622478ab99818ea45b7e1cd8fc290196");
+            }
         }
 
         private void OnDrawGizmosSelected()
         {
+            //// TODO [bgish]: Actually color these by this.colorBy
+
             foreach (var octreeVolume in this.octreeVolumes)
             {
                 var bounds = octreeVolume.CenterBounds;
