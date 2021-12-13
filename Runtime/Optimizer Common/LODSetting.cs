@@ -27,14 +27,8 @@ namespace Lost
         public enum MeshSimplifier
         {
             None = 0,
-                
-            #if USING_SIMPLYGON
             Simplygon = 1,
-            #endif
-                
-            #if USING_UNITY_MESH_SIMPLIFIER
             UnityMeshSimplifier = 2,
-            #endif                
         }
             
         #if USING_UNITY_MESH_SIMPLIFIER

@@ -20,6 +20,8 @@ namespace Lost
     
     public class SceneOptimizer : MonoBehaviour
     {
+        #pragma warning disable 0649
+        [SerializeField] private OptimizerSettings optimizerSettings;
         [SerializeField] private List<GameObject> meshRenderersGameObjects = new List<GameObject>();
         [SerializeField] private List<OctreeVolume> octreeVolumes = new List<OctreeVolume>();
         [SerializeField] private List<MeshRendererInfo> meshRendererInfos = new List<MeshRendererInfo>();
@@ -27,25 +29,9 @@ namespace Lost
         [SerializeField] private float maxBoundsSize = 2000;
         [SerializeField] private float minBoundsSize = 30;
         [SerializeField] private Bounds octreeBounds;
-    
+        #pragma warning restore 0649
+
         [ReadOnly] [SerializeField] private Transform volumesTransform;
-        [ReadOnly] [SerializeField] private List<VolumeOptimizer> volumesMeshCombiners;
-    
-        public List<OctreeVolume> OctreeVolumes => this.octreeVolumes;
-    
-        // #if UNITY_EDITOR
-    
-        public void OnDrawGizmosSelected()
-        {
-            foreach (var octreeVolume in this.octreeVolumes)
-            {
-                var bounds = octreeVolume.CenterBounds;
-                Gizmos.DrawWireCube(bounds.center, bounds.size);
-            }
-    
-            //// Debug
-            //// Gizmos.DrawWireCube(this.octreeBounds.center, this.octreeBounds.size);
-        }
         
         public void CalculateOctree()
         {
@@ -53,7 +39,7 @@ namespace Lost
             this.meshRendererInfos.Clear();
     
             DateTime startMeshRendererCollection = DateTime.Now;
-            this.meshRendererInfos = this.GetMeshRendererInfos();
+            this.meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(this.meshRenderersGameObjects);
             DateTime endMeshRendererCollection = DateTime.Now;
             double meshCollctionInMillis = endMeshRendererCollection.Subtract(startMeshRendererCollection).TotalMilliseconds;
             Debug.Log($"Mesh Renderer Collection took {meshCollctionInMillis} milliseconds");
@@ -79,48 +65,46 @@ namespace Lost
     
             Debug.Log("Mesh Renderers: " + this.meshRendererInfos.Count);
             Debug.Log("Octree Volume: " + this.octreeVolumes.Count);
-    
+
+            //// Debug.Log("Average MeshRender per Volume: Not Implemented");
+            //// Debug.Log("Average Triangles per Volume: Not Implemented");
+
+            #if UNITY_EDITOR
             int missingFromOctreeCount = octreeMeshRenderers.Sum(x => x.OctreeVolumeIndex == -1 ? 1 : 0);
             if (missingFromOctreeCount > 0)
             {
                 UnityEditor.Selection.objects = octreeMeshRenderers.Where(x => x.OctreeVolumeIndex == -1).Select(x => x.MeshRenderer.gameObject).ToArray();
-    
                 Debug.LogError($"Mesh Renderers Without Octree Volume: {missingFromOctreeCount}");
             }
-    
-            //// Debug.Log("Average MeshRender per Volume: Not Implemented");
-            //// Debug.Log("Average Triangles per Volume: Not Implemented");
+            #endif
         }
     
-        public void DeleteVolumesMeshCombine()
+        public void DeleteLODs()
         {
-            if (this.volumesMeshCombiners == null)
+            if (this.octreeVolumes == null)
             {
-                this.volumesMeshCombiners = new List<VolumeOptimizer>();
+                return;
             }
-    
-            foreach (var meshCombine in this.volumesMeshCombiners)
+
+            foreach (var volume in this.octreeVolumes)
             {
-                //meshCombine.Revert();
+                volume.Revert();
             }
-    
-            this.volumesMeshCombiners.Clear();
-            this.volumesTransform.DestroyAllChildrenImmediate();
         }
     
-        public void GenerateVolumesMeshCombine()
+        public void GenerateLODs()
         {
-            this.DeleteVolumesMeshCombine();
+            this.DeleteLODs();
     
             int count = 0;
             foreach (var volume in this.octreeVolumes)
             {
-                GameObject volumeMeshCombine = new GameObject($"Volume {count++}", typeof(VolumeOptimizer));
-                volumeMeshCombine.transform.SetParent(this.volumesTransform);
-                volumeMeshCombine.transform.position = volume.CenterBounds.center;
-                var meshCombineList = volumeMeshCombine.GetComponent<VolumeOptimizer>();
-                meshCombineList.SetList(volume.MeshRendererInfos.Select(x => x.MeshRenderer).ToList());
-                //meshCombineList.CreateLOD(0);
+                GameObject volumeGameObject = new GameObject($"Volume {count++}");
+                volumeGameObject.transform.SetParent(this.volumesTransform);
+                volumeGameObject.transform.position = volume.CenterBounds.center;
+                volume.GameObject = volumeGameObject;
+
+                MeshCombiner.CreateLODs(volumeGameObject.transform, this.optimizerSettings.LODSettings, volume.MeshRendererInfos, true);
             }
         }
     
@@ -223,67 +207,6 @@ namespace Lost
             }
         }
     
-        private List<MeshRendererInfo> GetMeshRendererInfos()
-        {
-            List<MeshRendererInfo> results = new List<MeshRendererInfo>();
-    
-            foreach (var meshRenderersGameObject in this.meshRenderersGameObjects)
-            {
-                foreach (var meshRenderer in meshRenderersGameObject.GetComponentsInChildren<MeshRenderer>(true))
-                {
-                    if (meshRenderer.enabled == false)
-                    {
-                        continue;
-                    }
-    
-                    var meshFilter = meshRenderer.gameObject.GetComponent<MeshFilter>();
-                    var lodGroup = meshRenderer.gameObject.GetComponentInParent<LODGroup>();
-                    var ignore = meshRenderer.gameObject.GetComponentInParent<ObjectOptimizerIgnore>();
-    
-                    if (meshFilter == null || meshFilter.sharedMesh == null)
-                    {
-                        continue;
-                    }
-    
-                    results.Add(new MeshRendererInfo
-                    {
-                        MeshRenderer = meshRenderer,
-                        MeshFilter = meshFilter,
-                        LodGroup = lodGroup,
-                        IgnoreMeshCombine = ignore,
-                        TriCount = meshFilter.sharedMesh.triangles.Length,
-                        VertCount = meshFilter.sharedMesh.vertexCount,
-                        LODLevel = GetLODLevel(meshRenderer, lodGroup),
-                        IsIgnored = ignore != null && ignore.IgnoreLOD == IgnoreLOD.LOD0AndAbove,
-                        Bounds = meshRenderer.bounds,
-                    });
-                }
-            }
-    
-            return results;
-    
-            int GetLODLevel(MeshRenderer meshRenderer, LODGroup lodGroup)
-            {
-                int lodLevel = 0;
-    
-                if (lodGroup != null)
-                {
-                    var lods = lodGroup.GetLODs();
-    
-                    for (int i = 0; i < lods.Length; i++)
-                    {
-                        if (lods[i].renderers.Contains(meshRenderer))
-                        {
-                            lodLevel = i;
-                            break;
-                        }
-                    }
-                }
-    
-                return lodLevel;
-            }
-        }
-    
         private Bounds GetMaxBounds(List<MeshRendererInfo> meshRendererInfos)
         {
             Bounds totalBounds = meshRendererInfos[0].Bounds;
@@ -324,17 +247,25 @@ namespace Lost
                 this.volumesTransform.Reset();
             }
         }
-    
-        // #endif
-    
+
+        private void OnDrawGizmosSelected()
+        {
+            foreach (var octreeVolume in this.octreeVolumes)
+            {
+                var bounds = octreeVolume.CenterBounds;
+                Gizmos.DrawWireCube(bounds.center, bounds.size);
+            }
+        }
+
         [Serializable]
-        public class OctreeVolume
+        private class OctreeVolume
         {
             [SerializeField] private List<MeshRendererInfo> meshRendererInfos;
             [SerializeField] private Bounds bounds;
             [SerializeField] private Bounds centerBounds;
             [SerializeField] private int triCount;
-    
+            [SerializeField] private GameObject gameObject;
+
             public List<MeshRendererInfo> MeshRendererInfos
             {
                 get => this.meshRendererInfos;
@@ -358,80 +289,33 @@ namespace Lost
                 get => this.triCount;
                 set => this.triCount = value;
             }
-        }
-    
-        [Serializable]
-        public class MeshRendererInfo
-        {
-            [SerializeField] private MeshRenderer meshRenderer;
-            [SerializeField] private MeshFilter meshFilter;
-            [SerializeField] private LODGroup lodGroup;
-            [SerializeField] private ObjectOptimizerIgnore ignoreMeshCombine;
-            [SerializeField] private int lodLevel;
-            [SerializeField] private int vertCount;
-            [SerializeField] private int triCount;
-            [SerializeField] private bool isIgnored;
-            [SerializeField] private Bounds bounds;
-            [SerializeField] private int octreeVolumeIndex = -1;
-    
-            public MeshRenderer MeshRenderer
+
+            public GameObject GameObject
             {
-                get => this.meshRenderer;
-                set => this.meshRenderer = value;
+                get => this.gameObject;
+                set => this.gameObject = value;
             }
-    
-            public MeshFilter MeshFilter
+
+            public void CraeteLODs()
             {
-                get => this.meshFilter;
-                set => this.meshFilter = value;
+
             }
-    
-            public LODGroup LodGroup
+
+            public void Revert()
             {
-                get => this.lodGroup;
-                set => this.lodGroup = value;
-            }
-    
-            public ObjectOptimizerIgnore IgnoreMeshCombine
-            {
-                get => this.ignoreMeshCombine;
-                set => this.ignoreMeshCombine = value;
-            }
-    
-            public int LODLevel
-            {
-                get => this.lodLevel;
-                set => this.lodLevel = value;
-            }
-    
-            public int VertCount
-            {
-                get => this.vertCount;
-                set => this.vertCount = value;
-            }
-    
-            public int TriCount
-            {
-                get => this.triCount;
-                set => this.triCount = value;
-            }
-    
-            public bool IsIgnored
-            {
-                get => this.isIgnored;
-                set => this.isIgnored = value;
-            }
-    
-            public Bounds Bounds
-            {
-                get => this.bounds;
-                set => this.bounds = value;
-            }
-    
-            public int OctreeVolumeIndex
-            {
-                get => this.octreeVolumeIndex;
-                set => this.octreeVolumeIndex = value;
+                if (this.gameObject)
+                {
+                    MeshCombiner.DestoryLODs(this.gameObject.transform, this.meshRendererInfos);
+
+                    if (Application.isPlaying == false)
+                    {
+                        GameObject.DestroyImmediate(this.GameObject);
+                    }
+                    else
+                    {
+                        GameObject.Destroy(this.GameObject);
+                    }
+                }
             }
         }
     }

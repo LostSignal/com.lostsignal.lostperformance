@@ -17,8 +17,7 @@ namespace Lost
         [SerializeField] private OptimizerSettings settings;
         
         [ReadOnly] [SerializeField] private bool isOptimized;
-        [ReadOnly] [SerializeField] private List<MeshRenderer> combinedMeshRenderers;
-        [ReadOnly] [SerializeField] private List<MeshFilter> combinedMeshFilters;
+        [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos;
         [ReadOnly] [SerializeField] private List<BoxCollider> combinedBoxColliders;
         [ReadOnly] [SerializeField] private List<MeshCollider> combinedMeshColliders;
         #pragma warning restore 0649
@@ -37,9 +36,8 @@ namespace Lost
             this.isOptimized = true;
 
             // Collecting and merging MeshRenderers
-            this.combinedMeshRenderers = this.GetMeshRenderersToCombine(0);
-            this.combinedMeshFilters = this.combinedMeshRenderers.Select(x => x.GetComponent<MeshFilter>()).ToList();
-            MeshCombiner.CreateLODs(this.transform, this.settings.LODSettings, this.combinedMeshRenderers, generateLODGroup: true);
+            this.meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(new List<GameObject> { this.gameObject });
+            MeshCombiner.CreateLODs(this.transform, this.settings.LODSettings, this.meshRendererInfos, generateLODGroup: true);
 
             // TODO [bgish]: Collect Box Colliders
             // TODO [bgish]: Optimize Box Colliders
@@ -60,18 +58,15 @@ namespace Lost
             }
 
             // Destroying LODs
-            MeshCombiner.DestoryLODs(this.transform);
+            MeshCombiner.DestoryLODs(this.transform, this.meshRendererInfos);
 
-            // TODO [bgish]: Delete LODS parent GameObject
             // TODO [bgish]: Delete BoxColliders parent GameObject
             // TODO [bgish]: Delete MeshColliders parent GameObject
 
-            this.combinedMeshRenderers.ForEach(x => x.enabled = true);
             this.combinedBoxColliders.ForEach(x => x.enabled = true);
             this.combinedMeshColliders.ForEach(x => x.enabled = true);
 
-            this.combinedMeshRenderers.Clear();
-            this.combinedMeshFilters.Clear();
+            this.meshRendererInfos.Clear();
             this.combinedBoxColliders.Clear();
             this.combinedMeshColliders.Clear();
             
@@ -95,7 +90,7 @@ namespace Lost
         #if UNITY_EDITOR
         private void Awake()
         {
-            if (Application.isPlaying)
+            if (Application.isPlaying && this.isOptimized)
             {
                 this.CleanUp();
             }
@@ -104,14 +99,9 @@ namespace Lost
 
         private void OnValidate()
         {
-            if (this.combinedMeshRenderers == null)
+            if (this.meshRendererInfos == null)
             {
-                this.combinedMeshRenderers = new List<MeshRenderer>();
-            }
-
-            if (this.combinedMeshFilters == null)
-            {
-                this.combinedMeshFilters = new List<MeshFilter>();
+                this.meshRendererInfos = new List<MeshRendererInfo>();
             }
 
             if (this.combinedBoxColliders == null)
@@ -123,22 +113,6 @@ namespace Lost
             {
                 this.combinedMeshColliders = new List<MeshCollider>();
             }
-        }
-
-        private List<MeshRenderer> GetMeshRenderersToCombine(int lodLevel)
-        {
-            return this.GetComponentsInChildren<MeshRenderer>(true)
-                .Where((x) =>
-                {
-                    var meshFilter = x.GetComponent<MeshFilter>();
-                    var ignore = x.GetComponentInParent<ObjectOptimizerIgnore>();
-
-                    bool isMeshFilterValid = meshFilter != null && meshFilter.sharedMesh != null;
-                    bool isIgnoreValid = ignore == null || lodLevel < (int)ignore.IgnoreLOD;
-
-                    return isMeshFilterValid && isIgnoreValid;
-                })
-                .ToList();
         }
 
         private void CleanUp(bool unpackPrefabsCompletely = false)
@@ -155,35 +129,15 @@ namespace Lost
             }
             #endif
 
-            this.combinedMeshRenderers.ForEach(x => Destory(x));
-            this.combinedMeshFilters.ForEach(x => Destory(x));
-            this.combinedBoxColliders.ForEach(x => Destory(x));
-            this.combinedMeshColliders.ForEach(x => Destory(x));
+            this.meshRendererInfos.ForEach(x => GameObject.DestroyImmediate(x.MeshRenderer));
+            this.meshRendererInfos.ForEach(x => GameObject.DestroyImmediate(x.MeshFilter));
+            this.combinedBoxColliders.ForEach(x => GameObject.DestroyImmediate(x));
+            this.combinedMeshColliders.ForEach(x => GameObject.DestroyImmediate(x));
 
-            this.combinedMeshRenderers.Clear();
-            this.combinedMeshFilters.Clear();
-            this.combinedBoxColliders.Clear();
-            this.combinedMeshColliders.Clear();
-
-            this.combinedMeshRenderers = null;
-            this.combinedMeshFilters = null;
-            this.combinedBoxColliders = null;
-            this.combinedMeshColliders = null;
+            //// TODO [bgish]: Make sure to handle destorying any disabled LODGroup components
 
             DeleteEmptyOrDisabledGameObjects(this.transform);
             Destroy(this);
-
-            void Destory(Component component)
-            {
-                if (Application.isPlaying)
-                {
-                    GameObject.Destroy(component);
-                }
-                else
-                {
-                    GameObject.DestroyImmediate(component);
-                }
-            }
 
             void DeleteEmptyOrDisabledGameObjects(Transform childTransform, bool isRoot = true)
             {
@@ -197,7 +151,7 @@ namespace Lost
 
                 if (isRoot == false && (isNotActive || hasNoComponents))
                 {
-                    GameObject.DestroyImmediate(childTransform);
+                    GameObject.DestroyImmediate(childTransform.gameObject);
                 }
             }
         }

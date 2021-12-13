@@ -1,5 +1,5 @@
 ﻿//-----------------------------------------------------------------------
-// <copyright file="MeshCombineManagerEditor.cs" company="Lost Signal">
+// <copyright file="SceneOptimizerEditor.cs" company="Lost Signal">
 //     Copyright (c) Lost Signal. All rights reserved.
 // </copyright>
 //-----------------------------------------------------------------------
@@ -14,7 +14,7 @@ namespace Lost
     //// TODO [bgish]: Update Gizmo to be transparent boxes with the color being green to red based on tri count
 
     [CustomEditor(typeof(SceneOptimizer), true)]
-    public class MeshCombineManagerEditor : Editor
+    public class SceneOptimizerEditor : Editor
     {
         private string meshRendererCountText;
 
@@ -39,15 +39,15 @@ namespace Lost
                 this.UpdateMeshRendererCount();
             }
 
-            if (GUILayout.Button("Generate MeshCombineVolume Meshes"))
+            if (GUILayout.Button("Generate LODs"))
             {
-                this.SceneOptimizer.GenerateVolumesMeshCombine();
+                this.SceneOptimizer.GenerateLODs();
                 this.UpdateMeshRendererCount();
             }
 
-            if (GUILayout.Button("Delete MeshCombineVolume Meshes"))
+            if (GUILayout.Button("Delete LODs"))
             {
-                this.SceneOptimizer.DeleteVolumesMeshCombine();
+                this.SceneOptimizer.DeleteLODs();
                 this.UpdateMeshRendererCount();
             }
 

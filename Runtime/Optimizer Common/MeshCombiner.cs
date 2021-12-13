@@ -17,81 +17,145 @@ namespace Lost
 
     public static class MeshCombiner
     {
-        public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRenderer> meshRenderersToCombine, bool generateLODGroup)
+        public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRendererInfo> meshRendererInfos, bool generateLODGroup)
         {
             // Making sure no old LODs are sitting around
             var lods = GetLODSTransform(transform, true);
             lods.DestroyAllChildren();
 
+            // Early out if no settings
             if (lodSettings.Count == 0)
             {
                 return;
             }
 
-            // Creating LOD0
-            var lod0 = new GameObject(lodSettings[0].Name, typeof(MeshFilter), typeof(MeshRenderer)).transform;
-            var lod0Transform = lod0.transform;
-            lod0Transform.SetParent(lods);
-            lod0Transform.Reset();
-            CreateCombinedMeshGameObject(lod0Transform, meshRenderersToCombine);
-            
-            // Making remaining LODs by copying LOD0
-            for (int i = 1; i < lodSettings.Count; i++)
+            // Create each individual LOD
+            for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
             {
-                var newLOD = GameObject.Instantiate(lod0, lods);
-                newLOD.name = lodSettings[i].Name;
+                var newLOD = new GameObject(lodSettings[0].Name, typeof(MeshFilter), typeof(MeshRenderer)).transform;
+                newLOD.name = lodSettings[lodIndex].Name;
                 newLOD.transform.SetParent(lods);
                 newLOD.transform.Reset();
+
+                CreateCombinedMeshGameObject(newLOD.transform, meshRendererInfos, lodIndex);
             }
 
             if (generateLODGroup)
             {
                 GenerateLODGroup(transform, lodSettings);
             }
+
+            static void GenerateLODGroup(Transform transform, List<LODSetting> lodSettings)
+            {
+                var lodsTransform = GetLODSTransform(transform, true);
+                var lods = new List<LOD>();
+
+                for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
+                {
+                    lods.Add(new LOD
+                    {
+                        screenRelativeTransitionHeight = lodSettings[lodIndex].ScreenPercentage,
+                        renderers = GetLODTransform(lodSettings, transform, lodIndex).GetComponentsInChildren<MeshRenderer>().ToArray(),
+                    });
+                }
+
+                var lodGroup = lodsTransform.gameObject.GetOrAddComponent<LODGroup>();
+                lodGroup.SetLODs(lods.ToArray());
+
+                #if UNITY_EDITOR
+                UnityEditor.EditorUtility.SetDirty(lodsTransform.gameObject);
+                #endif
+            }
         }
 
-        public static void DestoryLODs(Transform transform)
+        public static void DestoryLODs(Transform transform, List<MeshRendererInfo> meshRendererInfos)
         {
             var lodsTransform = GetLODSTransform(transform, false);
             
             if (lodsTransform != null)
             {
-                lodsTransform.DestroyAllChildren();
+                if (Application.isPlaying == false)
+                {
+                    GameObject.DestroyImmediate(lodsTransform.gameObject);
+                }
+                else
+                {
+                    GameObject.Destroy(lodsTransform.gameObject);
+                }
+            }
+
+            foreach (var meshRendererInfo in meshRendererInfos)
+            {
+                meshRendererInfo.MeshRenderer.enabled = true;
+                
+                if (meshRendererInfo.LodGroup != null)
+                {
+                    meshRendererInfo.LodGroup.enabled = true;
+                }
             }
         }
-        
-        private static void GenerateLODGroup(Transform transform, List<LODSetting> lodSettings)
+
+        public static Transform GetLODTransform(List<LODSetting> settings, Transform transform, int lodIndex)
         {
             var lodsTransform = GetLODSTransform(transform, true);
-            var lods = new List<LOD>();
+            var lodName = settings[lodIndex].Name;
+            var lod = transform.Find($"LODS/{lodName}");
 
-            for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
+            if (lod == null)
             {
-                lods.Add(new LOD
-                {
-                    screenRelativeTransitionHeight = lodSettings[lodIndex].ScreenPercentage,
-                    renderers = GetLODTransform(lodSettings, transform, lodIndex).GetComponentsInChildren<MeshRenderer>().ToArray(),
-                });
+                lod = new GameObject(lodName).transform;
+                lod.SetParent(lodsTransform);
+                lod.SetSiblingIndex(lodIndex);
+                lod.Reset();
             }
 
-            var lodGroup = lodsTransform.gameObject.GetOrAddComponent<LODGroup>();
-            lodGroup.SetLODs(lods.ToArray());
-
-            #if UNITY_EDITOR
-            UnityEditor.EditorUtility.SetDirty(lodsTransform.gameObject);
-            #endif
+            return lod;
         }
+
+        //// public static void CalculateLOD(Transform transform, List<LODSetting> settings, int lodIndex)
+        //// {
+        ////     if (lodIndex >= settings.Count)
+        ////     {
+        ////         return;
+        ////     }
+        //// 
+        ////     var lodTransform = GetLODTransform(settings, transform, lodIndex);
+        ////     var finalMeshFilter = lodTransform.gameObject.GetOrAddComponent<MeshFilter>();
+        ////     var finalMeshRenderer = lodTransform.gameObject.GetOrAddComponent<MeshRenderer>();
+        ////     this.SetCombinedMesh(finalMeshFilter, finalMeshRenderer, lodIndex);
+        //// 
+        ////     var lodSetting = this.settings.LODSettings[lodIndex];
+        //// 
+        ////     if (lodSettings.Quality == 1.0f)
+        ////     {
+        ////         return;
+        ////     }
+        //// 
+        ////     foreach (var meshFilter in lodTransform.GetComponentsInChildren<MeshFilter>())
+        ////     {
+        ////         var newMesh = this.CreateNewMesh(lodSetting, meshFilter);
+        //// 
+        ////         if (newMesh != null)
+        ////         {
+        ////             meshFilter.mesh = newMesh;
+        ////         }
+        ////     }
+        //// }
 
         ////
         //// Took a lot of inspiration from this blog post http://projectperko.blogspot.com/2016/08/multi-material-mesh-merge-snippet.html
         ////
-        private static void CreateCombinedMeshGameObject(Transform transform, List<MeshRenderer> meshRenderersToCombine)
+        private static void CreateCombinedMeshGameObject(Transform transform, List<MeshRendererInfo> meshRendererInfos, int lodIndex)
         {
             var finalMeshFilter = transform.gameObject.GetOrAddComponent<MeshFilter>();
             var finalMeshRenderer = transform.gameObject.GetOrAddComponent<MeshRenderer>();
 
-            var meshRenderers = meshRenderersToCombine;
-            var meshFilters = meshRenderersToCombine.Select(x => x.gameObject.GetComponent<MeshFilter>()).ToList();
+            // Filtering out all MeshRenderes that aren't apart of this LOD
+            meshRendererInfos = meshRendererInfos.Where(x => x.IsIgnored == false && lodIndex >= x.LODLevel).ToList();
+
+            var meshRenderers = meshRendererInfos.Select(x => x.MeshRenderer).ToList();
+            var meshFilters = meshRendererInfos.Select(x => x.MeshFilter).ToList();
+            var lodGroups = meshRendererInfos.Where(x => x.LodGroup != null).Select(x => x.LodGroup).Distinct().ToList();
             var materials = new List<Material>();
 
             // Making sure our arrays are value
@@ -166,6 +230,12 @@ namespace Lost
                 meshRenderers[i].enabled = false;
             }
 
+            // Disabling all the LODGroups
+            for (int i = 0; i < lodGroups.Count; i++)
+            {
+                lodGroups[i].enabled = false;
+            }
+
             var finalMesh = new Mesh();
             finalMesh.indexFormat = vertCount >= ushort.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             finalMesh.CombineMeshes(finalCombiners.ToArray(), false);
@@ -173,11 +243,13 @@ namespace Lost
             finalMeshFilter.sharedMesh = finalMesh;
             finalMeshRenderer.sharedMaterials = materials.ToArray();
 
-#if UNITY_EDITOR
+            #if UNITY_EDITOR
             UnityEditor.EditorUtility.SetDirty(finalMeshFilter.gameObject);
             UnityEditor.EditorUtility.SetDirty(finalMeshRenderer.gameObject);
-#endif
+            #endif
         }
+
+
 
         private static Transform GetLODSTransform(Transform transform, bool createIfDoesNotExist)
         {
@@ -193,56 +265,21 @@ namespace Lost
             return lods;
         }
 
-        private static Transform GetLODTransform(List<LODSetting> settings, Transform transform, int lodIndex)
-        {
-            var lodsTransform = GetLODSTransform(transform, true);
-            var lodName = settings[lodIndex].Name;
-            var lod = transform.Find($"LODS/{lodName}");
+        
 
-            if (lod == null)
-            {
-                lod = new GameObject(lodName).transform;
-                lod.SetParent(lodsTransform);
-                lod.SetSiblingIndex(lodIndex);
-                lod.Reset();
-            }
-
-            return lod;
-        }
-
-        //// public void SimplifyLODMesh(int lodIndex)
-        //// {
-        ////     if (lodIndex >= this.settings.LODSettings.Count)
-        ////     {
-        ////         return;
-        ////     }
-        //// 
-        ////     var lodTransform = this.GetLODTransform(lodIndex);
-        ////     var finalMeshFilter = lodTransform.gameObject.GetOrAddComponent<MeshFilter>();
-        ////     var finalMeshRenderer = lodTransform.gameObject.GetOrAddComponent<MeshRenderer>();
-        ////     this.SetCombinedMesh(finalMeshFilter, finalMeshRenderer, lodIndex);
-        //// 
-        ////     var lodSetting = this.settings.LODSettings[lodIndex];
-        //// 
-        ////     if (lodSettings.Quality == 1.0f)
-        ////     {
-        ////         return;
-        ////     }
-        //// 
-        ////     foreach (var meshFilter in lodTransform.GetComponentsInChildren<MeshFilter>())
-        ////     {
-        ////         var newMesh = this.CreateNewMesh(lodSetting, meshFilter);
-        //// 
-        ////         if (newMesh != null)
-        ////         {
-        ////             meshFilter.mesh = newMesh;
-        ////         }
-        ////     }
-        //// }
-        ////
-        //// private Mesh CreateNewMesh(ObjectOptimizerSettings.LODSetting lodSettings, MeshFilter meshFilter)
+        //// private static Mesh CreateNewMesh(OptimizerSettings settings, MeshFilter meshFilter)
         //// {
         ////     #if UNITY_EDITOR
+        //// 
+        //// 
+        ////     #if !USING_SIMPLYGON
+        ////     if (settings.)
+        ////     #endif
+        //// 
+        ////     #if USING_UNITY_MESH_SIMPLIFIER
+        //// 
+        //// 
+        //// 
         //// 
         ////     if (lodSettings.Simplifier == LODSettings.MeshSimplifier.UnityMeshSimplifier)
         ////     {
@@ -290,7 +327,7 @@ namespace Lost
         //// 
         ////     #endif
         //// }
-        ////
+        //// 
         //// public void SeperateMesh(int lodIndex)
         //// {
         ////     if (lodIndex >= this.lodSettings.Count)
