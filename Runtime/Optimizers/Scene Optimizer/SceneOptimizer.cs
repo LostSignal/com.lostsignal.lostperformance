@@ -1,5 +1,5 @@
 ﻿//-----------------------------------------------------------------------
-// <copyright file="MeshCombineManager.cs" company="Lost Signal">
+// <copyright file="SceneOptimizer.cs" company="Lost Signal">
 //     Copyright (c) Lost Signal. All rights reserved.
 // </copyright>
 //-----------------------------------------------------------------------
@@ -10,14 +10,6 @@ namespace Lost
     using System.Collections.Generic;
     using System.Linq;
     using UnityEngine;
-    using UnityEngine.SceneManagement;
-
-    ////
-    //// TODO [bgish]: Figure out what's better, have 1 mesh renderer with multiple materials, or multiple mesh renderers with 1 material
-    ////               Make my Remote Method Call (RMC) tool with the ability to find all MeshCombiner scripts and collapse/expand
-    ////
-    //// TODO [bgish]: Go through eveIry octreeMeshRenderers after calculating and make sure they were assigned an OctreeVolumeIndex
-    ////
 
     public class SceneOptimizer : MonoBehaviour
     {
@@ -138,20 +130,6 @@ namespace Lost
             foreach (var gameObject in this.objectOptimizationList)
             {
                 MeshCombiner.DeleteEmptyOrDisabledGameObjects(gameObject.transform);
-            }
-        }
-
-        [EditorEvents.OnProcessScene]
-        private static void CleanupSceneOptimizers(Scene scene)
-        {
-            if (Application.isEditor && Application.isPlaying == false && Application.isBatchMode && UnityEditor.BuildPipeline.isBuildingPlayer)
-            {
-                Debug.Log($"SceneOptimizer.CleanupSceneOptimizers({scene.name})");
-
-                foreach (var sceneOptimizer in GameObject.FindObjectsOfType<SceneOptimizer>().Where(x => x.gameObject.scene == scene))
-                {
-                    sceneOptimizer.CleanUp();
-                }
             }
         }
 
