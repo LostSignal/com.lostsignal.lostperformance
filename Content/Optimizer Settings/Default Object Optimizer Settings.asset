@@ -17,12 +17,4 @@ MonoBehaviour:
     quality: 1
     screenPercentage: 0.27
     simplifier: 0
-  - name: LOD1
-    quality: 0.5
-    screenPercentage: 0.08
-    simplifier: 0
-  - name: LOD2
-    quality: 0.25
-    screenPercentage: 0.002
-    simplifier: 0
-  generateLODGroupComponent: 1
+  generateLODGroup: 1

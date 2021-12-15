@@ -39,6 +39,15 @@ namespace Lost
             {
                 this.DrawSingleSelectUI();
             }
+
+            if (Application.isPlaying)
+            {
+                GUILayout.Space(20);
+                if (GUILayout.Button("Unload Unused Assets"))
+                {
+                    Resources.UnloadUnusedAssets();
+                }
+            }
         }
 
         private void DrawMultiSelectUI()

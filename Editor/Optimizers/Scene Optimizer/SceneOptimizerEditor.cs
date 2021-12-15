@@ -78,14 +78,19 @@ namespace Lost
             if (Application.isPlaying)
             {
                 GUILayout.Label("Misc");
-            }
+                
+                if (GUILayout.Button("Unload Unused Assets"))
+                {
+                    Resources.UnloadUnusedAssets();
+                }
 
-            if (Application.isPlaying && GUILayout.Button("Simulate Build Step"))
-            {
-                this.OnBuild();
-                this.DeleteDisabledMeshRenderers();
-                this.UpdateMeshRendererCount();
-                Resources.UnloadUnusedAssets();
+                //// if (GUILayout.Button("Simulate Build Step"))
+                //// {
+                ////     this.OnBuild();
+                ////     this.DeleteDisabledMeshRenderers();
+                ////     this.UpdateMeshRendererCount();
+                ////     Resources.UnloadUnusedAssets();
+                //// }
             }
 
             //// NOTE [bgish]: There is a very good chance that this should only affect the Octree ones

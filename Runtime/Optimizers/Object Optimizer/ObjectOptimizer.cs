@@ -60,7 +60,7 @@ namespace Lost
 
                 MeshCombiner.DeleteEmptyOrDisabledGameObjects(this.transform);
 
-                Destroy(this);
+                DestroyImmediate(this);
             }
         }
 
@@ -144,17 +144,6 @@ namespace Lost
 
         private void CleanUpOptimizedMeshRenderers()
         {
-            //// TODO [bgish]: Test this before commenting it
-            //// #if UNITY_EDITOR
-            //// if (Application.isPlaying == false && 
-            ////     Application.isBatchMode && 
-            ////     UnityEditor.BuildPipeline.isBuildingPlayer && 
-            ////     UnityEditor.PrefabUtility.GetPrefabInstanceStatus(this.gameObject) != UnityEditor.PrefabInstanceStatus.NotAPrefab)
-            //// {
-            ////     UnityEditor.PrefabUtility.UnpackPrefabInstance(this.gameObject, UnityEditor.PrefabUnpackMode.Completely, UnityEditor.InteractionMode.AutomatedAction);
-            //// }
-            //// #endif
-
             foreach (var meshRendererInfo in this.meshRendererInfos)
             {
                 if (meshRendererInfo.IsIgnored == false)

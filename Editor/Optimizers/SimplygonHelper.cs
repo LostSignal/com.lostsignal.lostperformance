@@ -16,10 +16,6 @@ namespace Lost
             // if so, initialize Simplygon
             using (Simplygon.ISimplygon simplygon = global::Simplygon.Loader.InitSimplygon(out Simplygon.EErrorCodes simplygonErrorCode, out string simplygonErrorMessage))
             {
-                simplygon.SetGlobalEnableLogSetting(true);
-                simplygon.SetGlobalLogToFileSetting(true);
-                simplygon.SetThreadLocalLogFileNameSetting(@"C:\Users\User\Desktop\Simplygon.txt");
-
                 // if Simplygon handle is valid, loop all selected objects
                 // and call Reduce function.
                 if (simplygonErrorCode == Simplygon.EErrorCodes.NoError)
