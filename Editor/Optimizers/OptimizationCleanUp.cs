@@ -15,7 +15,7 @@ namespace Lost
         [EditorEvents.OnProcessScene]
         public static void CleanUp(Scene scene)
         {
-            bool shouldCleanup = Application.isEditor && Application.isPlaying == false && UnityEditor.BuildPipeline.isBuildingPlayer; // && Application.isBatchMode;
+            bool shouldCleanup = Application.isEditor && Application.isPlaying == false && UnityEditor.BuildPipeline.isBuildingPlayer;
 
             if (shouldCleanup == false)
             {
