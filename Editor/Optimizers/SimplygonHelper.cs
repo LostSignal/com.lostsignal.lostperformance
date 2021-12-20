@@ -7,11 +7,30 @@
 namespace Lost
 {
     using System.Collections.Generic;
+    using UnityEditor;
     using UnityEngine;
 
+    [InitializeOnLoad]
     public static class SimplygonHelper
     {
-        public static void Test(List<GameObject> gameObjects)
+        static SimplygonHelper()
+        {
+            // TODO [bgish]: If we detect that the Simplygon DLL is installed on this computer, ask the user if they'd like it to be copied into the project,
+            //               then add new define "SIMPLYGON_DLL_PRESENT"?
+        }
+
+        public static void Reduce(List<GameObject> gameObjects, float quality)
+        {
+            #if USING_SIMPLYGON
+            ReduceInternal(gameObjects, quality);
+            #else
+            Debug.LogError("USING_SIMPLYGON is not defined!");
+            #endif
+        }
+
+        #if USING_SIMPLYGON
+
+        private static void ReduceInternal(List<GameObject> gameObjects, float quality)
         {
             // if so, initialize Simplygon
             using (Simplygon.ISimplygon simplygon = global::Simplygon.Loader.InitSimplygon(out Simplygon.EErrorCodes simplygonErrorCode, out string simplygonErrorMessage))
@@ -155,5 +174,7 @@ namespace Lost
         //// }
         //// 
         //// #endif
+        
+        #endif
     }
 }
