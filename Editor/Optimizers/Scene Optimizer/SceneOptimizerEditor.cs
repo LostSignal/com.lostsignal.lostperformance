@@ -1,4 +1,4 @@
-﻿//-----------------------------------------------------------------------
+//-----------------------------------------------------------------------
 // <copyright file="SceneOptimizerEditor.cs" company="Lost Signal">
 //     Copyright (c) Lost Signal. All rights reserved.
 // </copyright>

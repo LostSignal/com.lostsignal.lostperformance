@@ -1,4 +1,4 @@
-﻿//-----------------------------------------------------------------------
+//-----------------------------------------------------------------------
 // <copyright file="ObjectOptimizerEditor.cs" company="Lost Signal">
 //     Copyright (c) Lost Signal. All rights reserved.
 // </copyright>
