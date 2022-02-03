@@ -16,32 +16,38 @@ namespace Lost
     [InitializeOnLoad]
     public static class SimplygonHelper
     {
+        #if USING_SIMPLYGON
+        private static bool SimplygonInstalled = true;
+        #else
+        private static bool SimplygonInstalled = false;
+        #endif
+
         static SimplygonHelper()
         {
-            #if !USING_SIMPLYGON
-            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            // Making sure we add the USING_SIMPLYGON define if we detect Simplylgon Editor Plugin 
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
                 if (assembly.FullName.Contains("Simplygon.Unity.EditorPlugin"))
                 {
                     ProjectDefinesHelper.AddDefineToProject("USING_SIMPLYGON");
                 }
             }
-            #endif
         }
 
         public static GameObject Reduce(List<GameObject> gameObjects, float quality)
         {
-            #if USING_SIMPLYGON
-            
-            // TODO [bgish]: Make sure to debug log the time it took to create the LODs
-            return ReduceInternal(gameObjects, quality);
-            
-            #else
-            
-            SetupSimplygon();
-            return null;
-            
-            #endif
+            if (SimplygonInstalled)
+            {
+                using (new TimingLogger("Reduce"))
+                {
+                    return SimplygonReduce(gameObjects, quality);
+                }
+            }
+            else
+            {
+                SetupSimplygon();
+                return null;
+            }
         }
 
         private static void SetupSimplygon()
@@ -134,28 +140,29 @@ namespace Lost
             }
         }
 
-#if USING_SIMPLYGON
-
-        private static GameObject ReduceInternal(List<GameObject> gameObjects, float quality)
+        private static GameObject SimplygonReduce(List<GameObject> gameObjects, float quality)
         {
-            // if so, initialize Simplygon
+            #if USING_SIMPLYGON
+            
             using (Simplygon.ISimplygon simplygon = global::Simplygon.Loader.InitSimplygon(out Simplygon.EErrorCodes simplygonErrorCode, out string simplygonErrorMessage))
             {
-                // if Simplygon handle is valid, loop all selected objects
-                // and call Reduce function.
                 if (simplygonErrorCode == Simplygon.EErrorCodes.NoError)
                 {
-                    return ReduceTest(simplygon, 0.5f, gameObjects);
+                    return ReduceTest(simplygon, quality, gameObjects);
                 }
-
-                // if invalid handle, output error message to the Unity console
                 else
                 {
-                    Debug.Log("Initializing failed!");
+                    Debug.Log($"Simplygon Initializing failed with error code {simplygonErrorCode}");
                     return null;
                 }
             }
+
+            #else
+            throw new Exception("Can't call SimplygonReduce when USING_SIMPLYGON define not present!");
+            #endif
         }
+
+#if USING_SIMPLYGON
 
         private static GameObject ReduceTest(Simplygon.ISimplygon simplygon, float quality, List<GameObject> gameObjects)
         {
@@ -174,13 +181,13 @@ namespace Lost
                     string folderName = "Simplygon Temp Assets";
                     string baseFolder = $"Assets/{folderName}";
 
-                    if (UnityEditor.AssetDatabase.IsValidFolder(baseFolder) == false)
+                    if (AssetDatabase.IsValidFolder(baseFolder) == false)
                     {
-                        UnityEditor.AssetDatabase.CreateFolder("Assets", folderName);
+                        AssetDatabase.CreateFolder("Assets", folderName);
                     }
 
-                    string assetFolderGuid = UnityEditor.AssetDatabase.CreateFolder(baseFolder, "Simplygon Output");
-                    string assetFolderPath = UnityEditor.AssetDatabase.GUIDToAssetPath(assetFolderGuid);
+                    string assetFolderGuid = AssetDatabase.CreateFolder(baseFolder, "Simplygon Output");
+                    string assetFolderPath = AssetDatabase.GUIDToAssetPath(assetFolderGuid);
 
                     List<GameObject> importedGameObjects = new List<GameObject>();
                     int startingLodIndex = 0;
