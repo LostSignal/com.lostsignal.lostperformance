@@ -17,6 +17,14 @@ MonoBehaviour:
     quality: 1
     screenPercentage: 0.27
     simplifier: 0
+  - name: LOD1
+    quality: 0.5
+    screenPercentage: 0.1
+    simplifier: 0
+  - name: LOD2
+    quality: 0.25
+    screenPercentage: 0.05
+    simplifier: 0
   maxTrianglesPerVolume: 150000
   maxVolumeBoundsSize: 2000
   minVolumeBoundsSize: 30

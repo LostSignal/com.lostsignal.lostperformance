@@ -1,4 +1,4 @@
-﻿//-----------------------------------------------------------------------
+//-----------------------------------------------------------------------
 // <copyright file="SceneOptimizer.cs" company="Lost Signal">
 //     Copyright (c) Lost Signal. All rights reserved.
 // </copyright>
@@ -10,6 +10,16 @@ namespace Lost
     using System.Collections.Generic;
     using System.Linq;
     using UnityEngine;
+
+    ////
+    //// * Make a function ```List<GameObject> GetGameObjectsThatNeedMeshMove```
+    ////
+    //// * Make a Button "Move Meshes To Scene Folder (count)
+    ////   * If this mesh is in memory, then create/overwrite to correct location and point to that
+    ////   * If this mesh is not in memory, then copy from that file to the correct file and point to that
+    ////
+    //// * Make a Button "Clean up Simplygon Temp Folders"
+    ////
 
     public class SceneOptimizer : MonoBehaviour
     {
@@ -33,6 +43,8 @@ namespace Lost
             TriangleCount,
             MeshRendererCount,
         }
+
+        public SceneOptimizerSettings Settings => this.settings;
 
         public void CalculateOctree()
         {
@@ -109,7 +121,7 @@ namespace Lost
                     volumeGameObject.transform, 
                     this.settings.LODSettings, 
                     volume.MeshRendererInfos, 
-                    false);
+                    true);
             }
         }
 

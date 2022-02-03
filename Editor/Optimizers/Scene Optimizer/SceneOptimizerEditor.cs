@@ -6,6 +6,7 @@
 
 namespace Lost
 {
+    using System.Collections.Generic;
     using System.Linq;
     using UnityEditor;
     using UnityEngine;
@@ -17,6 +18,8 @@ namespace Lost
     public class SceneOptimizerEditor : Editor
     {
         private string meshRendererCountText;
+        private List<GameObject> lod1RecalculateList = new List<GameObject>();
+        private List<GameObject> lod2RecalculateList = new List<GameObject>();
 
         public SceneOptimizer SceneOptimizer => (SceneOptimizer)this.target;
 
@@ -30,8 +33,7 @@ namespace Lost
 
             // TODO [bgish]: Add Dropdown for how to color the bound boxes in editor
 
-            GUILayout.Space(10);
-
+            GUILayout.Space(25);
             GUILayout.Label("Mesh Combine Volumes");
 
             if (GUILayout.Button("Calculate Octree Volumes"))
@@ -45,6 +47,20 @@ namespace Lost
             {
                 this.SceneOptimizer.GenerateLODs();
                 this.UpdateMeshRendererCount();
+            }
+
+            // TODO [bgish]: Hard coding LOD1/LOD2 right here, but should make this programatic
+            if (this.lod1RecalculateList.Count > 0 && GUILayout.Button($"Calculate LOD1s ({this.lod1RecalculateList.Count})"))
+            {
+                this.SimplifyLODs(this.lod1RecalculateList, this.SceneOptimizer.Settings.LODSettings[1].Quality, 1);
+                this.UpdateRecalculateLists();
+            }
+
+            // TODO [bgish]: Hard coding LOD1/LOD2 right here, but should make this programatic
+            if (this.lod2RecalculateList.Count > 0 && GUILayout.Button($"Calcuate LOD2s ({this.lod2RecalculateList.Count})"))
+            {
+                this.SimplifyLODs(this.lod2RecalculateList, this.SceneOptimizer.Settings.LODSettings[2].Quality, 2);
+                this.UpdateRecalculateLists();
             }
 
             if (GUILayout.Button("Delete LODs"))
@@ -173,12 +189,16 @@ namespace Lost
 
         private void OnEnable()
         {
+            this.UpdateRecalculateLists();
             this.UpdateMeshRendererCount();
             SceneView.duringSceneGui += this.OnSceneGUI;
         }
 
         private void OnDisable()
         {
+            this.lod1RecalculateList.Clear();
+            this.lod2RecalculateList.Clear();
+
             SceneView.duringSceneGui -= this.OnSceneGUI;
         }
 
@@ -192,6 +212,61 @@ namespace Lost
         private void UpdateMeshRendererCount()
         {
             this.meshRendererCountText = $"Mesh Render Count: {GameObject.FindObjectsOfType<MeshRenderer>().Where(x => x.enabled).Count()}";
+        }
+
+        private void UpdateRecalculateLists()
+        {
+            this.lod1RecalculateList.Clear();
+            this.lod2RecalculateList.Clear();
+
+            foreach (var lodGroup in (this.target as SceneOptimizer).GetComponentsInChildren<LODGroup>())
+            {
+                var lods = lodGroup.GetLODs();
+
+                var lod0 = lods[0].renderers.FirstOrDefault().GetComponent<MeshFilter>();
+                var lod1 = lods[1].renderers.FirstOrDefault().GetComponent<MeshFilter>();
+                var lod2 = lods[2].renderers.FirstOrDefault().GetComponent<MeshFilter>();
+
+                if (lod1.sharedMesh.triangles.Length >= lod0.sharedMesh.triangles.Length)
+                {
+                    this.lod1RecalculateList.Add(lod1.gameObject);
+                }
+
+                if (lod2.sharedMesh.triangles.Length >= lod1.sharedMesh.triangles.Length)
+                {
+                    this.lod2RecalculateList.Add(lod2.gameObject);
+                }
+            }
+        }
+
+        private void SimplifyLODs(List<GameObject> gameObjects, float quality, int lod)
+        {
+            // Creating the Object to hold the batch
+            string batchObjectName = $"Simplygon LOD{lod} Batch";
+            var batchObject = GameObject.Find(batchObjectName);
+            if (batchObject == null)
+            {
+                batchObject = new GameObject(batchObjectName);
+                batchObject.transform.Reset();
+            }
+
+            // Adding all the game objects to the batch game object
+            batchObject.DestroyChildren();
+
+            foreach (var gameObject in gameObjects)
+            {
+                var copy = GameObject.Instantiate(gameObject, batchObject.transform);
+                copy.name = gameObject.GetInstanceID().ToString();
+                copy.transform.position = gameObject.transform.position;
+                copy.transform.rotation = gameObject.transform.rotation;
+                copy.transform.localScale = gameObject.transform.localScale;
+            }
+
+            // Sending the batch to Simplygon
+
+
+            ////   * Pass that object to Simplygon
+            ////   * When get the object back, reasign all the meshes of the original objects with their new values
         }
     }
 }

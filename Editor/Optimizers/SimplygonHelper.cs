@@ -21,9 +21,13 @@ namespace Lost
 
         public static void Reduce(List<GameObject> gameObjects, float quality)
         {
-            #if USING_SIMPLYGON
+            // TODO [bgish]: Simplygon not detected, download?
+            // TODO [bgish]: Simplygon detected, but not imported, import now? - Also add the USING_SIMPLYGON define
+            // TODO [bgish]: Make sure to debug log the time it took to create the LODs
+
+#if USING_SIMPLYGON
             ReduceInternal(gameObjects, quality);
-            #else
+#else
             Debug.LogError("USING_SIMPLYGON is not defined!");
             #endif
         }
