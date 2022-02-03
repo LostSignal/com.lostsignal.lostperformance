@@ -6,7 +6,10 @@
 
 namespace Lost
 {
+    using System;
     using System.Collections.Generic;
+    using System.IO;
+    using System.Linq;
     using UnityEditor;
     using UnityEngine;
 
@@ -15,26 +18,125 @@ namespace Lost
     {
         static SimplygonHelper()
         {
-            // TODO [bgish]: If we detect that the Simplygon DLL is installed on this computer, ask the user if they'd like it to be copied into the project,
-            //               then add new define "SIMPLYGON_DLL_PRESENT"?
-        }
-
-        public static void Reduce(List<GameObject> gameObjects, float quality)
-        {
-            // TODO [bgish]: Simplygon not detected, download?
-            // TODO [bgish]: Simplygon detected, but not imported, import now? - Also add the USING_SIMPLYGON define
-            // TODO [bgish]: Make sure to debug log the time it took to create the LODs
-
-#if USING_SIMPLYGON
-            ReduceInternal(gameObjects, quality);
-#else
-            Debug.LogError("USING_SIMPLYGON is not defined!");
+            #if !USING_SIMPLYGON
+            foreach (var assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (assembly.FullName.Contains("Simplygon.Unity.EditorPlugin"))
+                {
+                    ProjectDefinesHelper.AddDefineToProject("USING_SIMPLYGON");
+                }
+            }
             #endif
         }
 
-        #if USING_SIMPLYGON
+        public static GameObject Reduce(List<GameObject> gameObjects, float quality)
+        {
+            #if USING_SIMPLYGON
+            
+            // TODO [bgish]: Make sure to debug log the time it took to create the LODs
+            return ReduceInternal(gameObjects, quality);
+            
+            #else
+            
+            SetupSimplygon();
+            return null;
+            
+            #endif
+        }
 
-        private static void ReduceInternal(List<GameObject> gameObjects, float quality)
+        private static void SetupSimplygon()
+        {
+            var installDirectory = GetInstallDirectory();
+
+            if (installDirectory != null)
+            {
+                ImportSimplygonDLL(installDirectory);
+            }
+
+            static string FindSimplygonInstallFolders()
+            {
+                var installFolders = new List<string>
+                {
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                    Environment.ExpandEnvironmentVariables("%ProgramW6432%"),
+                    Environment.ExpandEnvironmentVariables("%ProgramFiles(x86)%"),
+                };
+
+                foreach (var installFolder in installFolders)
+                {
+                    var simplygonFolder = Path.Combine(installFolder, "Simplygon/9/Unity/bin").Replace("\\", "/");
+
+                    if (Directory.Exists(simplygonFolder))
+                    {
+                        return simplygonFolder;
+                    }
+                }
+
+                return null;
+            }
+
+            static string GetInstallDirectory()
+            {
+                var simplygonDirectory = FindSimplygonInstallFolders();
+                if (simplygonDirectory == null)
+                {
+                    bool result = EditorUtility.DisplayDialog(
+                        "Install Simplygon?",
+                        "Unable to find Simplygon install folder, would you like to download it now?",
+                        "yes",
+                        "no");
+
+                    if (result)
+                    {
+                        Application.OpenURL("https://www.simplygon.com/Downloads");
+                    }
+                }
+
+                return simplygonDirectory;
+            }
+
+            static void ImportSimplygonDLL(string simplygonInstallDirectory)
+            {
+                bool result = EditorUtility.DisplayDialog(
+                        "Import Simplygon?",
+                        "Found Simplygon, but hasn't been added to Unity yet.  Do that now?",
+                        "yes",
+                        "no");
+
+                if (result)
+                {
+                    var simplygonEditorDllFileName = "Simplygon.Unity.EditorPlugin.dll";
+                    var simplygonDllFilePath = Path.Combine(simplygonInstallDirectory, simplygonEditorDllFileName);
+
+                    var pluginsDirectory = "./Assets/Plugins";
+                    var editorDirectory = Path.Combine(pluginsDirectory, "Editor");
+                    var simplygonDirectory = Path.Combine(editorDirectory, "Simplygon");
+                    var simplygonOutputFilePath = Path.Combine(simplygonDirectory, simplygonEditorDllFileName);
+
+                    if (Directory.Exists(pluginsDirectory) == false)
+                    {
+                        Directory.CreateDirectory(pluginsDirectory);
+                    }
+
+                    if (Directory.Exists(editorDirectory) == false)
+                    {
+                        Directory.CreateDirectory(editorDirectory);
+                    }
+
+                    if (Directory.Exists(simplygonDirectory) == false)
+                    {
+                        Directory.CreateDirectory(simplygonDirectory);
+                    }
+
+                    File.WriteAllBytes(simplygonOutputFilePath, File.ReadAllBytes(simplygonDllFilePath));
+                }
+            }
+        }
+
+#if USING_SIMPLYGON
+
+        private static GameObject ReduceInternal(List<GameObject> gameObjects, float quality)
         {
             // if so, initialize Simplygon
             using (Simplygon.ISimplygon simplygon = global::Simplygon.Loader.InitSimplygon(out Simplygon.EErrorCodes simplygonErrorCode, out string simplygonErrorMessage))
@@ -43,18 +145,19 @@ namespace Lost
                 // and call Reduce function.
                 if (simplygonErrorCode == Simplygon.EErrorCodes.NoError)
                 {
-                    ReduceTest(simplygon, 0.5f, gameObjects);
+                    return ReduceTest(simplygon, 0.5f, gameObjects);
                 }
 
                 // if invalid handle, output error message to the Unity console
                 else
                 {
                     Debug.Log("Initializing failed!");
+                    return null;
                 }
             }
         }
 
-        private static void ReduceTest(Simplygon.ISimplygon simplygon, float quality, List<GameObject> gameObjects)
+        private static GameObject ReduceTest(Simplygon.ISimplygon simplygon, float quality, List<GameObject> gameObjects)
         {
             string exportTempDirectory = Simplygon.Unity.EditorPlugin.SimplygonUtils.GetNewTempDirectory();
             Debug.Log(exportTempDirectory);
@@ -88,6 +191,8 @@ namespace Lost
                     {
                         Debug.Log($"{(i + 1)} of {count}: " + importedGameObjects[i].name);
                     }
+
+                    return importedGameObjects.FirstOrDefault();
 
                     // if (importedGameObjects.Count > 0)
                     // {
@@ -179,6 +284,6 @@ namespace Lost
         //// 
         //// #endif
         
-        #endif
+#endif
     }
 }

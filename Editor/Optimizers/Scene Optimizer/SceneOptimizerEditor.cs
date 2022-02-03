@@ -263,7 +263,7 @@ namespace Lost
             }
 
             // Sending the batch to Simplygon
-
+            var output = SimplygonHelper.Reduce(new List<GameObject> { batchObject }, quality);
 
             ////   * Pass that object to Simplygon
             ////   * When get the object back, reasign all the meshes of the original objects with their new values
