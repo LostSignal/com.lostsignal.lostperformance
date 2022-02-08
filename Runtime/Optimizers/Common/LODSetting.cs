@@ -17,11 +17,6 @@ namespace Lost
         [SerializeField] private float quality;
         [SerializeField] private float screenPercentage;
         [SerializeField] private MeshSimplifier simplifier;
-            
-        #if USING_UNITY_MESH_SIMPLIFIER
-        [ShowIf(nameof(simplifier), MeshSimplifier.UnityMeshSimplifier)]
-        [SerializeField] private SimplificationOptions unityMeshSimplifierOptions = SimplificationOptions.Default;
-        #endif
         #pragma warning restore 0649
 
         public enum MeshSimplifier
@@ -30,14 +25,6 @@ namespace Lost
             Simplygon = 1,
             UnityMeshSimplifier = 2,
         }
-            
-        #if USING_UNITY_MESH_SIMPLIFIER
-        public SimplificationOptions Options
-        {
-            get => this.unityMeshSimplifierOptions;
-            set => this.unityMeshSimplifierOptions = value;
-        }
-        #endif
 
         public string Name
         {

@@ -6,9 +6,13 @@
 
 namespace Lost
 {
+    using System;
+    using System.Collections;
     using System.Collections.Generic;
     using System.Linq;
+    using Unity.EditorCoroutines.Editor;
     using UnityEditor;
+    using UnityEditor.SceneManagement;
     using UnityEngine;
 
     //// TODO [bgish]: Add button to toggle gizmo for this class on/off
@@ -18,6 +22,7 @@ namespace Lost
     public class SceneOptimizerEditor : Editor
     {
         private string meshRendererCountText;
+        private List<GameObject> all = new List<GameObject>();
         private List<GameObject> lod1RecalculateList = new List<GameObject>();
         private List<GameObject> lod2RecalculateList = new List<GameObject>();
 
@@ -41,26 +46,36 @@ namespace Lost
                 this.SceneOptimizer.CalculateOctree();
                 SceneView.RepaintAll();
                 this.UpdateMeshRendererCount();
+                EditorUtility.SetDirty(this.target);
             }
 
             if (GUILayout.Button("Generate LODs"))
             {
-                this.SceneOptimizer.GenerateLODs();
-                this.UpdateMeshRendererCount();
+                using (new TimingLogger("Generate LODs"))
+                {
+                    this.SceneOptimizer.GenerateLODs();
+                    this.UpdateMeshRendererCount();
+                    this.SaveAll();
+                }
             }
 
-            // TODO [bgish]: Hard coding LOD1/LOD2 right here, but should make this programatic
-            if (this.lod1RecalculateList.Count > 0 && GUILayout.Button($"Calculate LOD1s ({this.lod1RecalculateList.Count})"))
-            {
-                this.SimplifyLODs(this.lod1RecalculateList, this.SceneOptimizer.Settings.LODSettings[1].Quality, 1);
-                this.UpdateRecalculateLists();
-            }
+            //// // TODO [bgish]: Hard coding LOD1/LOD2 right here, but should make this programatic
+            //// if (this.lod1RecalculateList.Count > 0 && GUILayout.Button($"Calculate LOD1s ({this.lod1RecalculateList.Count})"))
+            //// {
+            ////     SimplygonHelper.ReduceGameObjects(this.lod1RecalculateList, this.SceneOptimizer.Settings.LODSettings[1].Quality, 1);                
+            ////     this.UpdateRecalculateLists();
+            //// }
+            //// 
+            //// // TODO [bgish]: Hard coding LOD1/LOD2 right here, but should make this programatic
+            //// if (this.lod2RecalculateList.Count > 0 && GUILayout.Button($"Calcuate LOD2s ({this.lod2RecalculateList.Count})"))
+            //// {
+            ////     SimplygonHelper.ReduceGameObjects(this.lod2RecalculateList, this.SceneOptimizer.Settings.LODSettings[2].Quality, 2);
+            ////     this.UpdateRecalculateLists();
+            //// }
 
-            // TODO [bgish]: Hard coding LOD1/LOD2 right here, but should make this programatic
-            if (this.lod2RecalculateList.Count > 0 && GUILayout.Button($"Calcuate LOD2s ({this.lod2RecalculateList.Count})"))
+            if (GUILayout.Button($"Recalculate All Simplygon LODs ({this.all.Count})"))
             {
-                this.SimplifyLODs(this.lod2RecalculateList, this.SceneOptimizer.Settings.LODSettings[2].Quality, 2);
-                this.UpdateRecalculateLists();
+                EditorCoroutineUtility.StartCoroutineOwnerless(this.SimplygonAll());
             }
 
             if (GUILayout.Button("Delete LODs"))
@@ -129,6 +144,61 @@ namespace Lost
             //// Now that you have all your renderers back, make your changes
             //// Press "START MESH COMBINE" to bring the optimization back and should have a list of "what chagned"
             //// with the option to update those changed areas.
+        }
+
+        private IEnumerator SimplygonAll()
+        {
+            // https://docs.unity3d.com/2021.2/Documentation/ScriptReference/Progress.html
+            // int progressId = Progress.Start("Running one task", 0);
+
+            var startTime = DateTime.Now;
+
+            this.all = this.all.OrderBy(x => x.GetFullName()).ToList();
+
+            for (int i = 0; i < this.all.Count; i++)
+            {
+                var gameObject = this.all[i];
+                var meshFilter = gameObject.GetComponent<MeshFilter>();
+
+                // Progress.Report(progressId, "any progress update or null if it hasn't changed", frame / 1000.0f);
+                
+                int lod = this.lod1RecalculateList.Contains(gameObject) ? 1 : 2;
+                
+                SimplygonHelper.ReduceGameObjects(new List<GameObject> { gameObject }, this.SceneOptimizer.Settings.LODSettings[lod].Quality, lod);
+                
+                //// this.ReduceGameObject(gameObject, this.SceneOptimizer.Settings.LODSettings[lod].Quality);
+
+                if (i > 1 && i % 50 == 0)
+                {
+                    this.SaveAll();
+                }
+
+                int completedJobs = i + 1;
+                int jobsRemaining = this.all.Count - completedJobs;
+                var totalSeconds = DateTime.Now.Subtract(startTime).TotalSeconds;
+                var averageSecondsPerJob = totalSeconds / completedJobs;
+                var secondsRemaining = averageSecondsPerJob * jobsRemaining;
+                var timeRemaining = TimingLogger.GetTimeAsString(TimeSpan.FromSeconds(secondsRemaining));
+
+                Debug.Log($"Finished Simplygon {i + 1} of {this.all.Count} - {meshFilter.sharedMesh.name}.  {timeRemaining} remaining...");
+
+                yield return null;
+
+                if (i == 1)
+                {
+                    break;
+                }
+            }
+
+            // Progress.Remove(progressId);
+            this.UpdateRecalculateLists();
+        }
+
+        private void SaveAll()
+        {
+            // Saving assets and the current scene
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.SaveScene(this.SceneOptimizer.gameObject.scene);
         }
 
         private void OnBuild()
@@ -216,6 +286,7 @@ namespace Lost
 
         private void UpdateRecalculateLists()
         {
+            this.all.Clear();
             this.lod1RecalculateList.Clear();
             this.lod2RecalculateList.Clear();
 
@@ -236,41 +307,41 @@ namespace Lost
                 {
                     this.lod2RecalculateList.Add(lod2.gameObject);
                 }
+
+                this.all.Add(lod1.gameObject);
+                this.all.Add(lod2.gameObject);
             }
         }
 
-        private void SimplifyLODs(List<GameObject> gameObjects, float quality, int lod)
+        private void ReduceGameObject(GameObject gameObject, float quality)
         {
-            // Creating the Object to hold the batch
-            string batchObjectName = $"Simplygon LOD{lod} Batch";
-            var batchObject = GameObject.Find(batchObjectName);
-            if (batchObject == null)
-            {
-                batchObject = new GameObject(batchObjectName);
-                batchObject.transform.Reset();
-            }
+            var sourceMeshFilter = gameObject.GetComponent<MeshFilter>();
+            var sourceMesh = sourceMeshFilter.sharedMesh;
+            var sourceMeshName = sourceMesh.name;
 
-            // Adding all the game objects to the batch game object
-            batchObject.DestroyChildren();
+            var options = UnityMeshSimplifier.SimplificationOptions.Default;
+            options.PreserveBorderEdges = true;
+            options.PreserveUVSeamEdges = true;
+            options.PreserveSurfaceCurvature = true;
 
-            foreach (var gameObject in gameObjects)
-            {
-                var copy = GameObject.Instantiate(gameObject, batchObject.transform);
-                copy.name = gameObject.GetInstanceID().ToString();
-                copy.transform.position = gameObject.transform.position;
-                copy.transform.rotation = gameObject.transform.rotation;
-                copy.transform.localScale = gameObject.transform.localScale;
-            }
+            //// options.VertexLinkDistance = 0.0001;
+            //// options.PreserveUVFoldoverEdges = true;
+            //// options.Agressiveness = 7.0f * 5;
+            //// options.MaxIterationCount = 100 * 5;
 
-            // Sending the batch to Simplygon
-            var output = SimplygonHelper.Reduce(new List<GameObject> { batchObject }, quality);
+            // TODO [bgish]: Need to wrap in USING_UNITY_MESH_SIMPLIFIER and print error (not installed if it fails)
+            // Also, add "com.whinarn.unitymeshsimplifier": "https://github.com/Whinarn/UnityMeshSimplifier.git#v3.0.0", to your manifest
+            var meshSimplifier = new UnityMeshSimplifier.MeshSimplifier();
+            meshSimplifier.SimplificationOptions = options;
+            meshSimplifier.Initialize(sourceMesh);
+            meshSimplifier.SimplifyMesh(quality);
 
-            if (output == null)
-            {
-                return;
-            }
+            var newMesh = meshSimplifier.ToMesh();
+            newMesh.RecalculateNormals();
+            newMesh.Optimize();
+            newMesh.name = sourceMeshName;
 
-            // Go through all children of output and use their name/instanceId to move mesh data back to the original object.
+            EditorUtility.CopySerialized(newMesh, sourceMesh);            
         }
     }
 }

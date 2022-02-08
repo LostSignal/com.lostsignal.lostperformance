@@ -1,4 +1,4 @@
-﻿//-----------------------------------------------------------------------
+//-----------------------------------------------------------------------
 // <copyright file="ObjectOptimizer.cs" company="Lost Signal LLC">
 //     Copyright (c) Lost Signal LLC. All rights reserved.
 // </copyright>
@@ -7,102 +7,86 @@
 namespace Lost
 {
     using System.Collections.Generic;
+    using System.IO;
+    using UnityEditor;
     using UnityEngine;
 
-    public class ObjectOptimizer : MonoBehaviour
+    public class ObjectOptimizer : Optimizer
     {
         #pragma warning disable 0649
+        [Header("Object Optimizer")]
         [SerializeField] private ObjectOptimizerSettings settings;
-        
-        [Header("Read Only")]
-        [ReadOnly] [SerializeField] private bool isOptimized;
-        [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos;
         [ReadOnly] [SerializeField] private List<BoxCollider> combinedBoxColliders;
         [ReadOnly] [SerializeField] private List<MeshCollider> combinedMeshColliders;
         #pragma warning restore 0649
 
-        public bool IsOptimized => this.isOptimized;
+        #if UNITY_EDITOR
+        [Header("Editor Only")]
+        [SerializeField] private DefaultAsset outputFolder;
+        #endif
 
         public OptimizerSettings Settings => this.settings;
 
+        #if UNITY_EDITOR
+
         public void Optimize()
         {
-            if (this.isOptimized)
-            {
-                this.Revert();
-            }
+            var meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(new List<GameObject> { this.gameObject });
+            this.Optimize(meshRendererInfos, this.settings.LODSettings, this.settings.GenerateLODGroup);
+        }
 
-            this.isOptimized = true;
-
-            this.OptimizeMeshRenderers();
+        public override void Optimize(List<MeshRendererInfo> meshRendererInfos, List<LODSetting> settings, bool generateLODGroup)
+        {
+            base.Optimize(meshRendererInfos, settings, generateLODGroup);
             this.OptimizeBoxColliders();
             this.OptimizeMeshColliders();
         }
 
-        public void Revert()
+        public override void Revert()
         {
-            if (this.isOptimized)
+            if (this.IsOptimized)
             {
-                this.RevertMeshRendererOptimization();
                 this.RevertBoxColliderOptimization();
                 this.RevertMeshColliderOptimization();
-                this.isOptimized = false;
             }
+
+            base.Revert();
         }
 
-        public void CleanUp()
+        public override void CleanUp()
         {
-            if (this.isOptimized)
+            if (this.IsOptimized)
             {
-                this.CleanUpOptimizedMeshRenderers();
                 this.CleanUpOptimizedBoxColliders();
                 this.CleanUpOptimizedMeshColliders();
-
-                MeshCombiner.DeleteEmptyOrDisabledGameObjects(this.transform);
-
-                DestroyImmediate(this);
             }
+
+            base.CleanUp();
         }
 
-        #if UNITY_EDITOR
-        private void Awake()
+        protected override void OnValidate()
         {
-            if (Application.isPlaying)
-            {
-                this.CleanUp();
-            }
-        }
-        #endif
-
-        private void OnValidate()
-        {
-            if (this.meshRendererInfos == null)
-            {
-                this.meshRendererInfos = new List<MeshRendererInfo>();
-            }
-
-            if (this.combinedBoxColliders == null)
-            {
-                this.combinedBoxColliders = new List<BoxCollider>();
-            }
-
-            if (this.combinedMeshColliders == null)
-            {
-                this.combinedMeshColliders = new List<MeshCollider>();
-            }
+            base.OnValidate();
 
             if (this.settings == null)
             {
                 // TODO [bgish]: Get the default settings from project settings, not hard coded
                 this.settings = EditorUtil.GetAssetByGuid<ObjectOptimizerSettings>("9026b0cfb0d3e9a4d95fd0c8697ec701");
             }
-        }
 
-        private void OptimizeMeshRenderers()
-        {
-            this.meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(new List<GameObject> { this.gameObject });
-            MeshCombiner.CreateLODs(this.transform, this.settings.LODSettings, this.meshRendererInfos, generateLODGroup: true);
+            #if UNITY_EDITOR
+            if (this.outputFolder == null)
+            {
+                var fileNameNoExtension = Path.GetFileNameWithoutExtension(this.gameObject.scene.path);
+                var directory = Path.GetDirectoryName(this.gameObject.scene.path);
+                var outputPath = Path.Combine(directory, $"{fileNameNoExtension}_Meshes", "Objects").Replace("\\", "/");
+                FolderUtil.CreateFolder(outputPath);
+                this.outputFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(outputPath);
+            }
+            #endif
         }
+        
+        protected override string GetMeshDirectory() => AssetDatabase.GetAssetPath(this.outputFolder);
 
         private void OptimizeBoxColliders()
         {
@@ -122,12 +106,6 @@ namespace Lost
             //// this.combinedMeshColliders.ForEach(x => x.enabled = false);
         }
 
-        private void RevertMeshRendererOptimization()
-        {
-            MeshCombiner.DestoryLODs(this.transform, this.meshRendererInfos);
-            this.meshRendererInfos.Clear();
-        }
-
         private void RevertBoxColliderOptimization()
         {
             // TODO [bgish]: Delete BoxColliders parent GameObject
@@ -142,18 +120,6 @@ namespace Lost
             this.combinedMeshColliders.Clear();
         }
 
-        private void CleanUpOptimizedMeshRenderers()
-        {
-            foreach (var meshRendererInfo in this.meshRendererInfos)
-            {
-                if (meshRendererInfo.IsIgnored == false)
-                {
-                    GameObject.DestroyImmediate(meshRendererInfo.MeshRenderer);
-                    GameObject.DestroyImmediate(meshRendererInfo.MeshFilter);
-                }
-            }
-        }
-
         private void CleanUpOptimizedBoxColliders()
         {
             //// TODO [bgish]: Implement...
@@ -165,5 +131,6 @@ namespace Lost
             //// TODO [bgish]: Implement...
             this.combinedMeshColliders.ForEach(x => GameObject.DestroyImmediate(x));
         }
+#endif
     }
 }

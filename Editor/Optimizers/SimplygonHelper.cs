@@ -13,6 +13,10 @@ namespace Lost
     using UnityEditor;
     using UnityEngine;
 
+
+
+
+
     [InitializeOnLoad]
     public static class SimplygonHelper
     {
@@ -34,19 +38,139 @@ namespace Lost
             }
         }
 
-        public static GameObject Reduce(List<GameObject> gameObjects, float quality)
+        public static void ReduceGameObjects(List<GameObject> gameObjects, float quality, int lod)
         {
-            if (SimplygonInstalled)
-            {
-                using (new TimingLogger("Reduce"))
-                {
-                    return SimplygonReduce(gameObjects, quality);
-                }
-            }
-            else
+            if (SimplygonInstalled == false)
             {
                 SetupSimplygon();
-                return null;
+                return;
+            }
+
+            gameObjects = gameObjects.Take(1).ToList();
+
+            //// TODO [bgish]: Filter out and print errors if find Meshes with zero verts/tris
+
+            // Creating a single object that will hold copies of the given gameObjects
+            string batchObjectName = $"Simplygon LOD{lod} Batch";
+            var batchObject = GameObject.Find(batchObjectName);
+            if (batchObject == null)
+            {
+                batchObject = new GameObject(batchObjectName);
+                batchObject.transform.Reset();
+            }
+
+            batchObject.DestroyChildren();
+            
+            var objectsToReduce = new List<GameObject>();
+
+            foreach (var gameObject in gameObjects)
+            {
+                var copy = GameObject.Instantiate(gameObject, batchObject.transform);
+                copy.name = gameObject.GetInstanceID().ToString();
+                copy.transform.position = gameObject.transform.position;
+                copy.transform.rotation = gameObject.transform.rotation;
+                copy.transform.localScale = gameObject.transform.localScale;
+                
+                objectsToReduce.Add(copy);
+            }
+
+            // Sending the batch to Simplygon
+            GameObject simplygonOutput = null;
+
+            //// using (new TimingLogger("Reduce"))
+            {
+                simplygonOutput = SimplygonReduce(objectsToReduce, quality);
+            }
+
+            if (simplygonOutput == null)
+            {
+                Debug.LogError("Unexcpected error when reducing game objects with Simplygon.");
+                return;
+            }
+
+            // Updating the original game objects list with the new meshes
+            for (int i = 0; i < batchObject.transform.childCount; i++)
+            {
+                var batchChild = batchObject.transform.GetChild(i);
+                var originalInstanceId = int.Parse(batchChild.name);
+                var original = (GameObject)EditorUtility.InstanceIDToObject(originalInstanceId);
+
+                List<GameObject> simplygonTransforms = new List<GameObject>();
+
+                // Speical case if there is only 1 object, it's the root
+                if (batchObject.transform.childCount == 1)
+                {
+                    simplygonTransforms.Add(simplygonOutput);
+                }
+                else
+                {
+                    simplygonTransforms = FindChildGameObject(simplygonOutput.transform, batchChild.name);
+                }
+            
+                if (simplygonTransforms.Count == 0)
+                {
+                    Debug.LogError($"Unable to find Simplygon Version of {original.name} with instance id {originalInstanceId}", original);
+                    continue;
+                }
+            
+                if (simplygonTransforms.Count > 1)
+                {
+                    Debug.LogError($"Found too many matching Simplygon Version of {original.name} with instance id {originalInstanceId}", original);
+                    continue;
+                }
+            
+                var simplygon = simplygonTransforms.FirstOrDefault();
+                var originalMeshFilter = original.GetComponent<MeshFilter>();
+                var simplygonMeshFilter = simplygon.GetComponent<MeshFilter>();
+            
+                if (simplygonMeshFilter == null)
+                {
+                    Debug.LogError($"Skipping Object {original.name}, simplygon did not produce a mesh filter for this object.", original);
+                    continue;
+                }
+            
+                // Copying the simplygon version 
+                var simplygonMesh = simplygonMeshFilter.sharedMesh;
+                var originalMesh = originalMeshFilter.sharedMesh;
+                var originalName = originalMesh.name;
+
+                EditorUtility.CopySerialized(simplygonMesh, originalMesh);
+                
+                originalMesh.name = originalName;
+
+                //// EditorUtil.SetDirty(originalMesh);
+                //// 
+                //// 
+                //// var newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(simplygonMesh);
+                //// var meshCopy = GameObject.Instantiate(newMesh);
+                //// meshCopy.name = originalMeshFilter.sharedMesh.name;
+                //// 
+                //// EditorApplication.delayCall += () =>
+                //// {
+                ////     originalMeshFilter.sharedMesh = meshCopy;
+                ////     EditorUtility.SetDirty(originalMeshFilter.gameObject);
+                //// };
+            }
+
+            // Destorying generated game objects
+            GameObject.DestroyImmediate(batchObject);
+            GameObject.DestroyImmediate(simplygonOutput);
+
+            List<GameObject> FindChildGameObject(Transform parent, string childToFind)
+            {
+                List<GameObject> children = new List<GameObject>();
+
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    var child = parent.GetChild(i);
+
+                    if (childToFind.EndsWith(child.name.Replace("_", string.Empty)))
+                    {
+                        children.Add(child.gameObject);
+                    }
+                }
+
+                return children;
             }
         }
 
@@ -148,7 +272,7 @@ namespace Lost
             {
                 if (simplygonErrorCode == Simplygon.EErrorCodes.NoError)
                 {
-                    return ReduceTest(simplygon, quality, gameObjects);
+                    return Reduce(simplygon, quality, gameObjects);
                 }
                 else
                 {
@@ -164,18 +288,39 @@ namespace Lost
 
 #if USING_SIMPLYGON
 
-        private static GameObject ReduceTest(Simplygon.ISimplygon simplygon, float quality, List<GameObject> gameObjects)
+        private static GameObject Reduce(Simplygon.ISimplygon simplygon, float quality, List<GameObject> gameObjects)
         {
             string exportTempDirectory = Simplygon.Unity.EditorPlugin.SimplygonUtils.GetNewTempDirectory();
-            Debug.Log(exportTempDirectory);
 
             using (Simplygon.spScene sgScene = Simplygon.Unity.EditorPlugin.SimplygonExporter.Export(simplygon, exportTempDirectory, gameObjects))
             {
-                using (Simplygon.spReductionPipeline reductionPipeline = simplygon.CreateReductionPipeline())
-                using (Simplygon.spReductionSettings reductionSettings = reductionPipeline.GetReductionSettings())
+                using (var reductionPipeline = simplygon.CreateReductionPipeline())
+                using (var reductionSettings = reductionPipeline.GetReductionSettings())
+                using (var repairSettings = reductionPipeline.GetRepairSettings())
                 {
                     reductionSettings.SetReductionTargets(Simplygon.EStopCondition.All, true, false, false, false);
                     reductionSettings.SetReductionTargetTriangleRatio(quality);
+
+                    reductionSettings.SetCurvatureImportance(10.0f);
+                    reductionSettings.SetEdgeSetImportance(1.0f);
+                    reductionSettings.SetGeometryImportance(10.0f);
+                    reductionSettings.SetGroupImportance(1.0f);
+                    reductionSettings.SetMaterialImportance(1.0f);
+                    reductionSettings.SetShadingImportance(1.0f);
+                    reductionSettings.SetSkinningImportance(1.0f);
+                    reductionSettings.SetTextureImportance(1.0f);
+                    reductionSettings.SetVertexColorImportance(1.0f);
+
+                    repairSettings.SetProgressivePasses(3);
+                    repairSettings.SetUseWelding(true);
+                    repairSettings.SetWeldDist(0.0f);
+                    repairSettings.SetUseTJunctionRemover(true);
+                    repairSettings.SetTJuncDist(0.0f);
+                    repairSettings.SetWeldOnlyBetweenSceneNodes(false);
+                    repairSettings.SetWeldOnlyBorderVertices(false);
+                    repairSettings.SetWeldOnlyWithinMaterial(false);
+                    repairSettings.SetWeldOnlyWithinSceneNode(false);
+
                     reductionPipeline.RunScene(sgScene, Simplygon.EPipelineRunMode.RunInThisProcess);
 
                     string folderName = "Simplygon Temp Assets";
@@ -193,104 +338,15 @@ namespace Lost
                     int startingLodIndex = 0;
                     Simplygon.Unity.EditorPlugin.SimplygonImporter.Import(simplygon, reductionPipeline, ref startingLodIndex, assetFolderPath, "Simplygon Output", importedGameObjects);
 
-                    int count = importedGameObjects.Count;
-                    for (int i = 0; i < count; i++)
-                    {
-                        Debug.Log($"{(i + 1)} of {count}: " + importedGameObjects[i].name);
-                    }
+                    // Cleaning up the temp export folder simplygon generated
+                    FileUtil.DeleteDirectory(exportTempDirectory);
+
+                    //// TODO [bgish]: Need to delete the asset folder created (but might be tricky because we need them to live for a few ticks before destroying them)
 
                     return importedGameObjects.FirstOrDefault();
-
-                    // if (importedGameObjects.Count > 0)
-                    // {
-                    //     var importedMeshFilter = importedGameObjects[0].GetComponent<MeshFilter>();
-                    // 
-                    //     if (importedMeshFilter != null)
-                    //     {
-                    //         var assetPath = AssetDatabase.GetAssetPath(importedMeshFilter.sharedMesh);
-                    //         var newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(assetPath);
-                    //         var meshCopy = GameObject.Instantiate(newMesh);
-                    // 
-                    //         EditorApplication.delayCall += () =>
-                    //         {
-                    //             originalMeshFilter.sharedMesh = meshCopy;
-                    //             EditorUtility.SetDirty(originalMeshFilter.gameObject);
-                    //         };
-                    //     }
-                    // }
-                    // 
-                    // foreach (var importedObject in importedGameObjects)
-                    // {
-                    //     GameObject.DestroyImmediate(importedObject);
-                    // }
                 }
             }
         }
-
-
-        //// 
-        //// #if UNITY_EDITOR
-        //// 
-        //// public static void Reduce(MeshFilter originalMeshFilter, Simplygon.ISimplygon simplygon, float quality)
-        //// {
-        ////     var gameObject = originalMeshFilter.gameObject;
-        ////     List<GameObject> selectedGameObjects = new List<GameObject>();
-        ////     selectedGameObjects.Add(gameObject);
-        //// 
-        ////     string exportTempDirectory = Simplygon.Unity.EditorPlugin.SimplygonUtils.GetNewTempDirectory();
-        ////     Debug.Log(exportTempDirectory);
-        //// 
-        ////     using (Simplygon.spScene sgScene = Simplygon.Unity.EditorPlugin.SimplygonExporter.Export(simplygon, exportTempDirectory, selectedGameObjects))
-        ////     {
-        ////         using (Simplygon.spReductionPipeline reductionPipeline = simplygon.CreateReductionPipeline())
-        ////         using (Simplygon.spReductionSettings reductionSettings = reductionPipeline.GetReductionSettings())
-        ////         {
-        ////             reductionSettings.SetReductionTargets(Simplygon.EStopCondition.All, true, false, false, false);
-        ////             reductionSettings.SetReductionTargetTriangleRatio(quality);
-        //// 
-        ////             reductionPipeline.RunScene(sgScene, Simplygon.EPipelineRunMode.RunInThisProcess);
-        //// 
-        ////             string baseFolder = "Assets/SimpleReductions";
-        ////             if (UnityEditor.AssetDatabase.IsValidFolder(baseFolder) == false)
-        ////             {
-        ////                 UnityEditor.AssetDatabase.CreateFolder("Assets", "SimpleReductions");
-        ////             }
-        //// 
-        ////             string assetFolderGuid = UnityEditor.AssetDatabase.CreateFolder(baseFolder, gameObject.name);
-        ////             string assetFolderPath = UnityEditor.AssetDatabase.GUIDToAssetPath(assetFolderGuid);
-        //// 
-        ////             List<GameObject> importedGameObjects = new List<GameObject>();
-        ////             int startingLodIndex = 0;
-        ////             Simplygon.Unity.EditorPlugin.SimplygonImporter.Import(simplygon, reductionPipeline, ref startingLodIndex, assetFolderPath, gameObject.name, importedGameObjects);
-        //// 
-        ////             if (importedGameObjects.Count > 0)
-        ////             {
-        ////                 var importedMeshFilter = importedGameObjects[0].GetComponent<MeshFilter>();
-        //// 
-        ////                 if (importedMeshFilter != null && importedMeshFilter.sharedMesh != null)
-        ////                 {
-        ////                     var assetPath = UnityEditor.AssetDatabase.GetAssetPath(importedMeshFilter.sharedMesh);
-        ////                     var newMesh = UnityEditor.AssetDatabase.LoadAssetAtPath<Mesh>(assetPath);
-        ////                     var meshCopy = GameObject.Instantiate(newMesh);
-        //// 
-        ////                     UnityEditor.EditorApplication.delayCall += () =>
-        ////                     {
-        ////                         originalMeshFilter.sharedMesh = meshCopy;
-        ////                         UnityEditor.EditorUtility.SetDirty(originalMeshFilter.gameObject);
-        ////                     };                            
-        ////                 }
-        ////             }
-        //// 
-        ////             foreach (var importedObject in importedGameObjects)
-        ////             {
-        ////                 GameObject.DestroyImmediate(importedObject);
-        ////             }
-        ////         }
-        ////     }
-        //// }
-        //// 
-        //// #endif
-        
 #endif
     }
 }

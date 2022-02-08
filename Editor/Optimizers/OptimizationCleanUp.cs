@@ -35,6 +35,12 @@ namespace Lost
                 Debug.Log($"OptimizationCleanUp Cleaning Up SceneOptimizer {sceneOptimizer.name}...");
                 sceneOptimizer.CleanUp();
             }
+
+            foreach (var volumeOptimizer in GameObject.FindObjectsOfType<VolumeOptimizer>().Where(x => x.gameObject.scene == scene))
+            {
+                Debug.Log($"OptimizationCleanUp Cleaning Up VolumeOptimizer {volumeOptimizer.name}...");
+                volumeOptimizer.CleanUp();
+            }
         }
     }
 }

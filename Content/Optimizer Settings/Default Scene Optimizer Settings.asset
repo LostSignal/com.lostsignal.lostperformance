@@ -15,17 +15,17 @@ MonoBehaviour:
   lodSettings:
   - name: LOD0
     quality: 1
-    screenPercentage: 0.27
+    screenPercentage: 0.65
     simplifier: 0
   - name: LOD1
     quality: 0.5
-    screenPercentage: 0.1
+    screenPercentage: 0.3
     simplifier: 0
   - name: LOD2
     quality: 0.25
-    screenPercentage: 0.05
+    screenPercentage: 0.01
     simplifier: 0
-  maxTrianglesPerVolume: 150000
+  maxTrianglesPerVolume: 200000
   maxVolumeBoundsSize: 2000
   minVolumeBoundsSize: 30
   generateStreamingLODGroup: 1

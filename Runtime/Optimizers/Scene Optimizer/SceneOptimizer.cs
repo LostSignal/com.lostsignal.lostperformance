@@ -8,7 +8,13 @@ namespace Lost
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
+    
+    #if UNITY_EDITOR
+    using UnityEditor;
+    #endif
+
     using UnityEngine;
 
     ////
@@ -27,8 +33,11 @@ namespace Lost
         [SerializeField] private SceneOptimizerSettings settings;
         [SerializeField] private List<GameObject> objectOptimizationList = new List<GameObject>();
 
-        [Header("Editor Visuals Only")]
+#if UNITY_EDITOR
+        [Header("Editor Only")]
         [SerializeField] private ColorBy colorBy;
+        [SerializeField] private DefaultAsset outputFolder;
+#endif
 
         [Header("Read Only")]
         [ReadOnly] [SerializeField] private List<OctreeVolume> octreeVolumes = new List<OctreeVolume>();
@@ -45,6 +54,10 @@ namespace Lost
         }
 
         public SceneOptimizerSettings Settings => this.settings;
+
+        #if UNITY_EDITOR
+        public string GetOuputFolder() => AssetDatabase.GetAssetPath(this.outputFolder);
+        #endif
 
         public void CalculateOctree()
         {
@@ -86,7 +99,7 @@ namespace Lost
             int missingFromOctreeCount = octreeMeshRenderers.Sum(x => x.OctreeVolumeIndex == -1 ? 1 : 0);
             if (missingFromOctreeCount > 0)
             {
-                UnityEditor.Selection.objects = octreeMeshRenderers.Where(x => x.OctreeVolumeIndex == -1).Select(x => x.MeshRenderer.gameObject).ToArray();
+                Selection.objects = octreeMeshRenderers.Where(x => x.OctreeVolumeIndex == -1).Select(x => x.MeshRenderer.gameObject).ToArray();
                 Debug.LogError($"Mesh Renderers Without Octree Volume: {missingFromOctreeCount}");
             }
             #endif
@@ -97,6 +110,12 @@ namespace Lost
             if (this.octreeVolumes == null)
             {
                 return;
+            }
+
+            foreach (var volumeOptimizer in this.GetComponentsInChildren<VolumeOptimizer>())
+            {
+                volumeOptimizer.Revert();
+                GameObject.DestroyImmediate(volumeOptimizer.gameObject);
             }
 
             foreach (var volume in this.octreeVolumes)
@@ -112,16 +131,13 @@ namespace Lost
             int count = 0;
             foreach (var volume in this.octreeVolumes)
             {
-                GameObject volumeGameObject = new GameObject($"Volume {count++}");
+                GameObject volumeGameObject = new GameObject($"Volume_{count++:000}");
                 volumeGameObject.transform.SetParent(this.volumesTransform);
                 volumeGameObject.transform.position = volume.CenterBounds.center;
                 volume.GameObject = volumeGameObject;
 
-                MeshCombiner.CreateLODs(
-                    volumeGameObject.transform, 
-                    this.settings.LODSettings, 
-                    volume.MeshRendererInfos, 
-                    true);
+                var volumeOptimizer = volumeGameObject.AddComponent<VolumeOptimizer>();
+                volumeOptimizer.Optimize(volume.MeshRendererInfos.ToList(), this.settings.LODSettings, true);
             }
         }
 
@@ -153,7 +169,45 @@ namespace Lost
                 this.CleanUp();
             }
         }
+
+        private void OnDrawGizmosSelected()
+        {
+            //// TODO [bgish]: Actually color these by this.colorBy
+
+            foreach (var octreeVolume in this.octreeVolumes)
+            {
+                var bounds = octreeVolume.CenterBounds;
+                Gizmos.DrawWireCube(bounds.center, bounds.size);
+            }
+        }
         #endif
+
+        private void OnValidate()
+        {
+            if (this.volumesTransform == null)
+            {
+                this.volumesTransform = new GameObject("Volumes").transform;
+                this.volumesTransform.SetParent(this.transform);
+                this.volumesTransform.Reset();
+            }
+
+            if (this.settings == null)
+            {
+                // TODO [bgish]: Get the default settings from project settings, not hard coded
+                this.settings = EditorUtil.GetAssetByGuid<SceneOptimizerSettings>("622478ab99818ea45b7e1cd8fc290196");
+            }
+
+            #if UNITY_EDITOR
+            if (this.outputFolder == null)
+            {
+                var fileNameNoExtension = Path.GetFileNameWithoutExtension(this.gameObject.scene.path);
+                var directory = Path.GetDirectoryName(this.gameObject.scene.path);
+                var outputPath = Path.Combine(directory, $"{fileNameNoExtension}_Meshes", "Volumes").Replace("\\", "/");
+                FolderUtil.CreateFolder(outputPath);
+                this.outputFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(outputPath);
+            }
+            #endif
+        }
 
         private void CalculateOctree(List<MeshRendererInfo> meshRendererInfos, Bounds bounds)
         {
@@ -285,33 +339,6 @@ namespace Lost
             return totalBounds;
         }
     
-        private void OnValidate()
-        {
-            if (this.volumesTransform == null)
-            {
-                this.volumesTransform = new GameObject("Volumes").transform;
-                this.volumesTransform.SetParent(this.transform);
-                this.volumesTransform.Reset();
-            }
-
-            if (this.settings == null)
-            {
-                // TODO [bgish]: Get the default settings from project settings, not hard coded
-                this.settings = EditorUtil.GetAssetByGuid<SceneOptimizerSettings>("622478ab99818ea45b7e1cd8fc290196");
-            }
-        }
-
-        private void OnDrawGizmosSelected()
-        {
-            //// TODO [bgish]: Actually color these by this.colorBy
-
-            foreach (var octreeVolume in this.octreeVolumes)
-            {
-                var bounds = octreeVolume.CenterBounds;
-                Gizmos.DrawWireCube(bounds.center, bounds.size);
-            }
-        }
-
         [Serializable]
         private class OctreeVolume
         {
@@ -360,16 +387,7 @@ namespace Lost
             {
                 if (this.gameObject)
                 {
-                    MeshCombiner.DestoryLODs(this.gameObject.transform, this.meshRendererInfos);
-
-                    if (Application.isPlaying == false)
-                    {
-                        GameObject.DestroyImmediate(this.GameObject);
-                    }
-                    else
-                    {
-                        GameObject.Destroy(this.GameObject);
-                    }
+                    this.GameObject = null;
                 }
             }
         }

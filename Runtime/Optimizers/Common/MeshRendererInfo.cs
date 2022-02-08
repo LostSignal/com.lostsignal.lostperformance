@@ -17,7 +17,7 @@ namespace Lost
         [SerializeField] private MeshRenderer meshRenderer;
         [SerializeField] private MeshFilter meshFilter;
         [SerializeField] private LODGroup lodGroup;
-        [SerializeField] private ObjectOptimizerIgnore ignoreMeshCombine;
+        [SerializeField] private OptimizerIgnore ignoreMeshCombine;
         [SerializeField] private int lodLevel;
         [SerializeField] private int vertCount;
         [SerializeField] private int triCount;
@@ -43,7 +43,7 @@ namespace Lost
             set => this.lodGroup = value;
         }
 
-        public ObjectOptimizerIgnore IgnoreMeshCombine
+        public OptimizerIgnore IgnoreMeshCombine
         {
             get => this.ignoreMeshCombine;
             set => this.ignoreMeshCombine = value;
@@ -100,7 +100,7 @@ namespace Lost
 
                     var meshFilter = meshRenderer.gameObject.GetComponent<MeshFilter>();
                     var lodGroup = meshRenderer.gameObject.GetComponentInParent<LODGroup>();
-                    var ignore = meshRenderer.gameObject.GetComponentInParent<ObjectOptimizerIgnore>();
+                    var ignore = meshRenderer.gameObject.GetComponentInParent<OptimizerIgnore>();
 
                     if (meshFilter == null || meshFilter.sharedMesh == null)
                     {

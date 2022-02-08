@@ -1,4 +1,4 @@
-﻿//-----------------------------------------------------------------------
+//-----------------------------------------------------------------------
 // <copyright file="MeshCombiner.cs" company="Lost Signal LLC">
 //     Copyright (c) Lost Signal LLC. All rights reserved.
 // </copyright>
@@ -12,7 +12,13 @@ namespace Lost
 {
     using System;
     using System.Collections.Generic;
+    using System.IO;
     using System.Linq;
+    
+    #if UNITY_EDITOR
+    using UnityEditor;
+    #endif
+
     using UnityEngine;
 
     public static class MeshCombiner
@@ -47,7 +53,7 @@ namespace Lost
             }
         }
 
-        public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRendererInfo> meshRendererInfos, bool generateLODGroup)
+        public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRendererInfo> meshRendererInfos, bool generateLODGroup, string meshName, string assetDirectory)
         {
             // Making sure no old LODs are sitting around
             var lods = GetLODSTransform(transform, true);
@@ -67,7 +73,8 @@ namespace Lost
                 newLOD.transform.SetParent(lods);
                 newLOD.transform.Reset();
 
-                CreateCombinedMeshGameObject(newLOD.transform, meshRendererInfos, lodIndex);
+                var newMeshName = meshName == null ? $"LOD{lodIndex}" : $"{meshName}_LOD{lodIndex}";
+                CreateCombinedMeshGameObject(newLOD.transform, meshRendererInfos, lodIndex, newMeshName, assetDirectory);
             }
 
             // Disabling all affected LODGroups
@@ -96,7 +103,7 @@ namespace Lost
                 lodGroup.SetLODs(lods.ToArray());
 
                 #if UNITY_EDITOR
-                UnityEditor.EditorUtility.SetDirty(lodsTransform.gameObject);
+                EditorUtility.SetDirty(lodsTransform.gameObject);
                 #endif
             }
         }
@@ -178,13 +185,18 @@ namespace Lost
         ////
         //// Took a lot of inspiration from this blog post http://projectperko.blogspot.com/2016/08/multi-material-mesh-merge-snippet.html
         ////
-        private static void CreateCombinedMeshGameObject(Transform transform, List<MeshRendererInfo> meshRendererInfos, int lodIndex)
+        private static void CreateCombinedMeshGameObject(Transform transform, List<MeshRendererInfo> meshRendererInfos, int lodIndex, string meshName, string assetDirectory)
         {
             var finalMeshFilter = transform.gameObject.GetOrAddComponent<MeshFilter>();
             var finalMeshRenderer = transform.gameObject.GetOrAddComponent<MeshRenderer>();
 
-            // Filtering out all MeshRenderes that aren't apart of this LOD
-            meshRendererInfos = meshRendererInfos.Where(x => x.IsIgnored == false && lodIndex >= x.LODLevel).ToList();
+            // Filting out all mesh renderers that are meant to be ignored at this LOD level
+            meshRendererInfos = meshRendererInfos.Where(x => x.IgnoreMeshCombine == null || lodIndex < (int)x.IgnoreMeshCombine.IgnoreLOD).ToList();
+
+            //// BUG [bgish]: These are some serious bugs invovling how we treat mesh renderers that are already apart of an LODGroup
+            //// // Filtering out all MeshRenderes that aren't apart of this LOD
+            // meshRendererInfos = meshRendererInfos.Where(x => x.LodGroup != null && x.LODLevel == lodIndex).ToList();
+            // REALLY need to combine all meshes that aren't apart of an LODGroup, Calculate New Mesh, then combines those back in
 
             var meshRenderers = meshRendererInfos.Select(x => x.MeshRenderer).ToList();
             var meshFilters = meshRendererInfos.Select(x => x.MeshFilter).ToList();
@@ -266,13 +278,38 @@ namespace Lost
             finalMesh.indexFormat = vertCount >= ushort.MaxValue ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
             finalMesh.CombineMeshes(finalCombiners.ToArray(), false);
 
+            if (string.IsNullOrWhiteSpace(meshName) == false)
+            {
+                finalMesh.name = meshName;
+            }
+
             finalMeshFilter.sharedMesh = finalMesh;
             finalMeshRenderer.sharedMaterials = materials.ToArray();
 
-            #if UNITY_EDITOR
-            UnityEditor.EditorUtility.SetDirty(finalMeshFilter.gameObject);
-            UnityEditor.EditorUtility.SetDirty(finalMeshRenderer.gameObject);
-            #endif
+            // Saving this mesh to disk
+            FolderUtil.CreateFolder(assetDirectory);
+            
+            var meshAssetPath = Path.Combine(assetDirectory, meshName + ".asset").Replace("\\", "/");
+            
+            if (File.Exists(meshAssetPath) == false)
+            {
+                AssetDatabase.CreateAsset(finalMeshFilter.sharedMesh, meshAssetPath);
+            }
+            else
+            {
+                var finalSharedMesh = finalMeshFilter.sharedMesh;
+                var existingMesh = AssetDatabase.LoadMainAssetAtPath(meshAssetPath) as Mesh;
+                existingMesh.Clear();
+            
+                EditorUtility.CopySerialized(finalSharedMesh, existingMesh);
+                existingMesh.name = meshName;
+                finalMeshFilter.sharedMesh = existingMesh;
+            
+                EditorUtil.SetDirty(existingMesh);
+            }
+
+            EditorUtility.SetDirty(finalMeshFilter.gameObject);
+            EditorUtility.SetDirty(finalMeshRenderer.gameObject);
         }
 
         private static Transform GetLODSTransform(Transform transform, bool createIfDoesNotExist)

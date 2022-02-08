@@ -9,7 +9,7 @@ namespace Lost
     using UnityEditor;
 
     [CanEditMultipleObjects]
-    [CustomEditor(typeof(ObjectOptimizerIgnore))]
+    [CustomEditor(typeof(OptimizerIgnore))]
     public class ObjectOptimizerIgnoreEditor : Editor
     {
     }

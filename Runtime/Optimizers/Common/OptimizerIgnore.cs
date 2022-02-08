@@ -22,7 +22,7 @@ namespace Lost
         LOD9AndAbove = 2,
     }
 
-    public class ObjectOptimizerIgnore : MonoBehaviour
+    public class OptimizerIgnore : MonoBehaviour
     {
         [SerializeField] private IgnoreLOD ignoreLevel;
 
