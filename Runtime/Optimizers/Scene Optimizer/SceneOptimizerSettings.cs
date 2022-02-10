@@ -15,12 +15,12 @@ namespace Lost
         [SerializeField] private int maxTrianglesPerVolume = 150000;
         [SerializeField] private float maxVolumeBoundsSize = 2000;
         [SerializeField] private float minVolumeBoundsSize = 30;
-        [SerializeField] private bool generateStreamingLODGroup = true;
         #pragma warning restore 0649
 
         public int MaxTrianglesPerVolume  => this.maxTrianglesPerVolume;
+
         public float MaxVolumeBoundsSize => this.maxVolumeBoundsSize;
+
         public float MinVolumeBoundsSize => this.minVolumeBoundsSize;
-        public bool GenerateStreamingLODGroup => this.generateStreamingLODGroup;
     }
 }

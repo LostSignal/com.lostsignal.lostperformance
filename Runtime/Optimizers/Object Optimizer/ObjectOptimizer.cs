@@ -13,31 +13,26 @@ namespace Lost
 
     public class ObjectOptimizer : Optimizer
     {
+        #if UNITY_EDITOR
+        
         #pragma warning disable 0649
         [Header("Object Optimizer")]
-        [SerializeField] private ObjectOptimizerSettings settings;
+        [SerializeField] private ObjectOptimizerSettings objectOptimizerSettings;
+        [SerializeField] private DefaultAsset outputFolder;
+
         [ReadOnly] [SerializeField] private List<BoxCollider> combinedBoxColliders;
         [ReadOnly] [SerializeField] private List<MeshCollider> combinedMeshColliders;
         #pragma warning restore 0649
-
-        #if UNITY_EDITOR
-        [Header("Editor Only")]
-        [SerializeField] private DefaultAsset outputFolder;
-        #endif
-
-        public OptimizerSettings Settings => this.settings;
-
-        #if UNITY_EDITOR
-
+                
         public void Optimize()
         {
             var meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(new List<GameObject> { this.gameObject });
-            this.Optimize(meshRendererInfos, this.settings.LODSettings, this.settings.GenerateLODGroup);
+            this.Optimize(meshRendererInfos, this.objectOptimizerSettings);
         }
 
-        public override void Optimize(List<MeshRendererInfo> meshRendererInfos, List<LODSetting> settings, bool generateLODGroup)
+        public override void Optimize(List<MeshRendererInfo> meshRendererInfos, OptimizerSettings settings)
         {
-            base.Optimize(meshRendererInfos, settings, generateLODGroup);
+            base.Optimize(meshRendererInfos, settings);
             this.OptimizeBoxColliders();
             this.OptimizeMeshColliders();
         }
@@ -68,10 +63,10 @@ namespace Lost
         {
             base.OnValidate();
 
-            if (this.settings == null)
+            if (this.objectOptimizerSettings == null)
             {
                 // TODO [bgish]: Get the default settings from project settings, not hard coded
-                this.settings = EditorUtil.GetAssetByGuid<ObjectOptimizerSettings>("9026b0cfb0d3e9a4d95fd0c8697ec701");
+                this.objectOptimizerSettings = EditorUtil.GetAssetByGuid<ObjectOptimizerSettings>("9026b0cfb0d3e9a4d95fd0c8697ec701");
             }
 
             #if UNITY_EDITOR
@@ -80,7 +75,7 @@ namespace Lost
                 var fileNameNoExtension = Path.GetFileNameWithoutExtension(this.gameObject.scene.path);
                 var directory = Path.GetDirectoryName(this.gameObject.scene.path);
                 var outputPath = Path.Combine(directory, $"{fileNameNoExtension}_Meshes", "Objects").Replace("\\", "/");
-                FolderUtil.CreateFolder(outputPath);
+                DirectoryUtil.CreateFolder(outputPath);
                 this.outputFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(outputPath);
             }
             #endif
@@ -131,6 +126,7 @@ namespace Lost
             //// TODO [bgish]: Implement...
             this.combinedMeshColliders.ForEach(x => GameObject.DestroyImmediate(x));
         }
-#endif
+        
+        #endif
     }
 }

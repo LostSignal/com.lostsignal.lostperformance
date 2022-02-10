@@ -10,6 +10,8 @@ namespace Lost
 
     public class VolumeOptimizer : Optimizer
     {
+        #if UNITY_EDITOR
+
         protected override string GetMeshDirectory()
         {
             var meshName = this.GetMeshName();
@@ -19,5 +21,7 @@ namespace Lost
 
             return Path.Combine(sceneOptimizer.GetOuputFolder(), volumeDir).Replace("\\", "/");
         }
+
+        #endif
     }
 }

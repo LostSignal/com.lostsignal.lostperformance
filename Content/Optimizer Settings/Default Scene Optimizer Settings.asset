@@ -25,7 +25,7 @@ MonoBehaviour:
     quality: 0.25
     screenPercentage: 0.01
     simplifier: 0
+  generateLODGroup: 1
   maxTrianglesPerVolume: 200000
   maxVolumeBoundsSize: 2000
   minVolumeBoundsSize: 30
-  generateStreamingLODGroup: 1

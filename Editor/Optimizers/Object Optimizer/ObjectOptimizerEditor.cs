@@ -6,6 +6,7 @@
 
 namespace Lost
 {
+    using System.Collections.Generic;
     using System.Linq;
     using UnityEditor;
     using UnityEngine;
@@ -33,11 +34,17 @@ namespace Lost
 
             if (this.targets?.Length > 1)
             {
+                GUILayout.Space(20.0f);
                 this.DrawMultiSelectUI();
+                GUILayout.Space(20.0f);
+                OptimizerEditorUtil.DrawLODButtons(this.targets.OfType<Optimizer>().ToList(), true);
             }
             else
             {
+                GUILayout.Space(20.0f);
                 this.DrawSingleSelectUI();
+                GUILayout.Space(20.0f);
+                OptimizerEditorUtil.DrawLODButtons(new List<Optimizer> { (Optimizer)this.target }, false);
             }
 
             if (Application.isPlaying)
@@ -83,19 +90,6 @@ namespace Lost
                 {
                     objectOptimizer.Revert();
                     this.UpdateMeshRendererCount();
-                }
-
-                GUILayout.Space(20);
-
-                for (int i = 1; i < objectOptimizer.Settings.LODSettings.Count; i++)
-                {
-                    var setting = objectOptimizer.Settings.LODSettings[i];
-
-                    // setting.Simplifier == ObjectOptimizerSettings.LODSetting.MeshSimplifier.UnityMeshSimplifier
-                    if (GUILayout.Button($"Calculate LOD{i}"))
-                    {
-                        Debug.LogError("Not Implemented Yet");
-                    }
                 }
             }
             else

@@ -29,19 +29,18 @@ namespace Lost
 
     public class SceneOptimizer : MonoBehaviour
     {
+        #if UNITY_EDITOR
+        
         #pragma warning disable 0649
-        [SerializeField] private SceneOptimizerSettings settings;
+        [SerializeField] private SceneOptimizerSettings sceneOptimizerSettings;
         [SerializeField] private List<GameObject> objectOptimizationList = new List<GameObject>();
-
-#if UNITY_EDITOR
-        [Header("Editor Only")]
         [SerializeField] private ColorBy colorBy;
         [SerializeField] private DefaultAsset outputFolder;
-#endif
-
+    
         [Header("Read Only")]
         [ReadOnly] [SerializeField] private List<OctreeVolume> octreeVolumes = new List<OctreeVolume>();
         [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos = new List<MeshRendererInfo>();
+        [ReadOnly] [SerializeField] private List<VolumeOptimizer> volumeOptimizers = new List<VolumeOptimizer>();
         [ReadOnly] [SerializeField] private Bounds octreeBounds;
         [ReadOnly] [SerializeField] private Transform volumesTransform;
         #pragma warning restore 0649
@@ -53,17 +52,20 @@ namespace Lost
             MeshRendererCount,
         }
 
-        public SceneOptimizerSettings Settings => this.settings;
+        public SceneOptimizerSettings Settings => this.sceneOptimizerSettings;
 
-        #if UNITY_EDITOR
+        public bool OctreeExists => this.octreeVolumes?.Count > 0;
+
         public string GetOuputFolder() => AssetDatabase.GetAssetPath(this.outputFolder);
-        #endif
+
+        public List<VolumeOptimizer> VolumeOptimizers => this.volumeOptimizers;
 
         public void CalculateOctree()
         {
             this.octreeVolumes.Clear();
             this.meshRendererInfos.Clear();
-    
+            this.volumeOptimizers.Clear();
+
             DateTime startMeshRendererCollection = DateTime.Now;
             this.meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(this.objectOptimizationList);
             DateTime endMeshRendererCollection = DateTime.Now;
@@ -107,6 +109,8 @@ namespace Lost
     
         public void DeleteLODs()
         {
+            this.volumeOptimizers.Clear();
+
             if (this.octreeVolumes == null)
             {
                 return;
@@ -127,7 +131,7 @@ namespace Lost
         public void GenerateLODs()
         {
             this.DeleteLODs();
-    
+
             int count = 0;
             foreach (var volume in this.octreeVolumes)
             {
@@ -137,7 +141,8 @@ namespace Lost
                 volume.GameObject = volumeGameObject;
 
                 var volumeOptimizer = volumeGameObject.AddComponent<VolumeOptimizer>();
-                volumeOptimizer.Optimize(volume.MeshRendererInfos.ToList(), this.settings.LODSettings, true);
+                volumeOptimizer.Optimize(volume.MeshRendererInfos.ToList(), this.sceneOptimizerSettings);
+                this.volumeOptimizers.Add(volumeOptimizer);
             }
         }
 
@@ -161,7 +166,6 @@ namespace Lost
             }
         }
 
-        #if UNITY_EDITOR
         private void Awake()
         {
             if (Application.isPlaying)
@@ -180,7 +184,6 @@ namespace Lost
                 Gizmos.DrawWireCube(bounds.center, bounds.size);
             }
         }
-        #endif
 
         private void OnValidate()
         {
@@ -191,22 +194,20 @@ namespace Lost
                 this.volumesTransform.Reset();
             }
 
-            if (this.settings == null)
+            if (this.sceneOptimizerSettings == null)
             {
                 // TODO [bgish]: Get the default settings from project settings, not hard coded
-                this.settings = EditorUtil.GetAssetByGuid<SceneOptimizerSettings>("622478ab99818ea45b7e1cd8fc290196");
+                this.sceneOptimizerSettings = EditorUtil.GetAssetByGuid<SceneOptimizerSettings>("622478ab99818ea45b7e1cd8fc290196");
             }
 
-            #if UNITY_EDITOR
             if (this.outputFolder == null)
             {
                 var fileNameNoExtension = Path.GetFileNameWithoutExtension(this.gameObject.scene.path);
                 var directory = Path.GetDirectoryName(this.gameObject.scene.path);
                 var outputPath = Path.Combine(directory, $"{fileNameNoExtension}_Meshes", "Volumes").Replace("\\", "/");
-                FolderUtil.CreateFolder(outputPath);
+                DirectoryUtil.CreateFolder(outputPath);
                 this.outputFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(outputPath);
             }
-            #endif
         }
 
         private void CalculateOctree(List<MeshRendererInfo> meshRendererInfos, Bounds bounds)
@@ -218,15 +219,15 @@ namespace Lost
     
             float boundsSize = GetBoundsSize(bounds);
     
-            if (boundsSize >= this.settings.MaxVolumeBoundsSize)
+            if (boundsSize >= this.sceneOptimizerSettings.MaxVolumeBoundsSize)
             {
                 Split(meshRendererInfos, bounds);
             }
-            else if (boundsSize <= this.settings.MinVolumeBoundsSize)
+            else if (boundsSize <= this.sceneOptimizerSettings.MinVolumeBoundsSize)
             {
                 AddOctreeVolume(meshRendererInfos, bounds);
             }
-            else if (meshRendererInfos.Sum(x => x.TriCount) > this.settings.MaxTrianglesPerVolume)
+            else if (meshRendererInfos.Sum(x => x.TriCount) > this.sceneOptimizerSettings.MaxTrianglesPerVolume)
             {
                 Split(meshRendererInfos, bounds);
             }
@@ -391,5 +392,7 @@ namespace Lost
                 }
             }
         }
+
+        #endif
     }
 }

@@ -8,17 +8,15 @@
 //// TODO [bgish]: Add check box to delete empty game objects as well
 //// TODO [bgish]: Make sure we also clean up the temp directory after done importing simplygon assets
 
+#if UNITY_EDITOR
+
 namespace Lost
 {
     using System;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
-    
-    #if UNITY_EDITOR
     using UnityEditor;
-    #endif
-
     using UnityEngine;
 
     public static class MeshCombiner
@@ -53,41 +51,42 @@ namespace Lost
             }
         }
 
-        public static void CreateLODs(Transform transform, List<LODSetting> lodSettings, List<MeshRendererInfo> meshRendererInfos, bool generateLODGroup, string meshName, string assetDirectory)
+        public static void CreateLOD(Transform transform,
+            List<LODSetting> lodSettings,
+            List<MeshRendererInfo> meshRendererInfos,
+            bool generateLODGroup,
+            string meshName,
+            string assetDirectory,
+            int lod = -1)
         {
-            // Making sure no old LODs are sitting around
-            var lods = GetLODSTransform(transform, true);
-            lods.DestroyAllChildren();
-
             // Early out if no settings
             if (lodSettings.Count == 0)
             {
                 return;
             }
 
-            // Create each individual LOD
-            for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
-            {
-                var newLOD = new GameObject(lodSettings[0].Name, typeof(MeshFilter), typeof(MeshRenderer)).transform;
-                newLOD.name = lodSettings[lodIndex].Name;
-                newLOD.transform.SetParent(lods);
-                newLOD.transform.Reset();
+            // Creating LOD and making sure has needed components
+            var lodTransform = GetLODTransform(transform, lodSettings, lod);
+            lodTransform.gameObject.GetOrAddComponent<MeshFilter>();
+            lodTransform.gameObject.GetOrAddComponent<MeshRenderer>();
 
-                var newMeshName = meshName == null ? $"LOD{lodIndex}" : $"{meshName}_LOD{lodIndex}";
-                CreateCombinedMeshGameObject(newLOD.transform, meshRendererInfos, lodIndex, newMeshName, assetDirectory);
-            }
+            // Creating the combined mesh
+            var newMeshName = meshName == null ? $"LOD{lod}" : $"{meshName}_LOD{lod}";
+            CreateCombinedMeshGameObject(lodTransform, meshRendererInfos, lod, newMeshName, assetDirectory);
 
             // Disabling all affected LODGroups
             UpdateLODGroups(meshRendererInfos, false);
 
-            if (generateLODGroup)
+            GenerateLODGroup();
+            
+            void GenerateLODGroup()
             {
-                GenerateLODGroup(transform, lodSettings);
-            }
+                if (generateLODGroup == false)
+                {
+                    return;
+                }
 
-            static void GenerateLODGroup(Transform transform, List<LODSetting> lodSettings)
-            {
-                var lodsTransform = GetLODSTransform(transform, true);
+                var lodsTransform = GetLODsTransform(transform, true);
                 var lods = new List<LOD>();
 
                 for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
@@ -95,22 +94,20 @@ namespace Lost
                     lods.Add(new LOD
                     {
                         screenRelativeTransitionHeight = lodSettings[lodIndex].ScreenPercentage,
-                        renderers = GetLODTransform(lodSettings, transform, lodIndex).GetComponentsInChildren<MeshRenderer>().ToArray(),
+                        renderers = GetLODTransform(transform, lodSettings, lodIndex).GetComponentsInChildren<MeshRenderer>().ToArray(),
                     });
                 }
 
                 var lodGroup = lodsTransform.gameObject.GetOrAddComponent<LODGroup>();
                 lodGroup.SetLODs(lods.ToArray());
 
-                #if UNITY_EDITOR
-                EditorUtility.SetDirty(lodsTransform.gameObject);
-                #endif
+                EditorUtil.SetDirty(lodsTransform.gameObject);
             }
         }
 
         public static void DestoryLODs(Transform transform, List<MeshRendererInfo> meshRendererInfos)
         {
-            var lodsTransform = GetLODSTransform(transform, false);
+            var lodsTransform = GetLODsTransform(transform, false);
             
             // Destroying LOD Transforms
             if (lodsTransform != null)
@@ -135,9 +132,9 @@ namespace Lost
             UpdateLODGroups(meshRendererInfos, true);
         }
 
-        public static Transform GetLODTransform(List<LODSetting> settings, Transform transform, int lodIndex)
+        public static Transform GetLODTransform(Transform transform, List<LODSetting> settings, int lodIndex)
         {
-            var lodsTransform = GetLODSTransform(transform, true);
+            var lodsTransform = GetLODsTransform(transform, true);
             var lodName = settings[lodIndex].Name;
             var lod = transform.Find($"LODS/{lodName}");
 
@@ -145,8 +142,12 @@ namespace Lost
             {
                 lod = new GameObject(lodName).transform;
                 lod.SetParent(lodsTransform);
-                lod.SetSiblingIndex(lodIndex);
                 lod.Reset();
+            }
+
+            if (lod.GetSiblingIndex() != lodIndex)
+            {
+                lod.SetSiblingIndex(lodIndex);
             }
 
             return lod;
@@ -287,7 +288,7 @@ namespace Lost
             finalMeshRenderer.sharedMaterials = materials.ToArray();
 
             // Saving this mesh to disk
-            FolderUtil.CreateFolder(assetDirectory);
+            DirectoryUtil.CreateFolder(assetDirectory);
             
             var meshAssetPath = Path.Combine(assetDirectory, meshName + ".asset").Replace("\\", "/");
             
@@ -308,11 +309,11 @@ namespace Lost
                 EditorUtil.SetDirty(existingMesh);
             }
 
-            EditorUtility.SetDirty(finalMeshFilter.gameObject);
-            EditorUtility.SetDirty(finalMeshRenderer.gameObject);
+            EditorUtil.SetDirty(finalMeshFilter.gameObject);
+            EditorUtil.SetDirty(finalMeshRenderer.gameObject);
         }
 
-        private static Transform GetLODSTransform(Transform transform, bool createIfDoesNotExist)
+        public static Transform GetLODsTransform(Transform transform, bool createIfDoesNotExist)
         {
             var lods = transform.Find("LODS");
 
@@ -466,3 +467,5 @@ namespace Lost
         //// }
     }
 }
+
+#endif

@@ -13,9 +13,18 @@ namespace Lost
     {
 #pragma warning disable 0649
         [SerializeField] private List<LODSetting> lodSettings;
+        [SerializeField] private bool generateLODGroup;
+        [SerializeField] private UnityMeshSimplifierSettings unityMeshSimplifierSettings;
+        [SerializeField] private SimplygonSettings simplygonSettings;
 #pragma warning restore 0649
 
         public List<LODSetting> LODSettings => this.lodSettings;
+
+        public bool GenerateLODGroup => this.generateLODGroup;
+
+        public UnityMeshSimplifierSettings UnityMeshSimplifierSettings => this.unityMeshSimplifierSettings;
+
+        public SimplygonSettings SimplygonSettings => this.simplygonSettings;
 
         protected virtual void OnValidate()
         {
