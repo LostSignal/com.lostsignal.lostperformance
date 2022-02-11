@@ -51,6 +51,28 @@ namespace Lost
             }
         }
 
+        public static void CreateLOD(OptimizedLOD optimizedLOD)
+        {
+            var lodTransform = optimizedLOD.transform;
+            lodTransform.gameObject.GetOrAddComponent<MeshFilter>();
+            lodTransform.gameObject.GetOrAddComponent<MeshRenderer>();
+            lodTransform.gameObject.GetOrAddComponent<OptimizedLOD>();
+
+            var lodIndex = optimizedLOD.LODIndex;
+            var optimizer = optimizedLOD.Optimizer;
+            var meshName = optimizer.GetMeshName();
+            var meshDir = optimizer.GetMeshDirectory();
+
+            // Creating the combined mesh
+            var newMeshName = $"{meshName}_LOD{lodIndex}";
+            CreateCombinedMeshGameObject(lodTransform, optimizer.MeshRendererInfos, lodIndex, newMeshName, meshDir);
+
+            optimizedLOD.GetComponentInParent<OptimizedLODGroup>().UpdateLODGroup();
+
+            // // Disabling all affected LODGroups
+            // UpdateLODGroups(meshRendererInfos, false);
+        }
+
         public static void CreateLOD(Transform transform,
             List<LODSetting> lodSettings,
             List<MeshRendererInfo> meshRendererInfos,
@@ -69,6 +91,7 @@ namespace Lost
             var lodTransform = GetLODTransform(transform, lodSettings, lod);
             lodTransform.gameObject.GetOrAddComponent<MeshFilter>();
             lodTransform.gameObject.GetOrAddComponent<MeshRenderer>();
+            lodTransform.gameObject.GetOrAddComponent<OptimizedLOD>();
 
             // Creating the combined mesh
             var newMeshName = meshName == null ? $"LOD{lod}" : $"{meshName}_LOD{lod}";
@@ -319,7 +342,7 @@ namespace Lost
 
             if (lods == null && createIfDoesNotExist)
             {
-                lods = new GameObject("LODS").transform;
+                lods = new GameObject("LODS", typeof(OptimizedLODGroup)).transform;
                 lods.SetParent(transform);
                 lods.Reset();
             }

@@ -12,7 +12,7 @@ namespace Lost
     {
         #if UNITY_EDITOR
 
-        protected override string GetMeshDirectory()
+        public override string GetMeshDirectory()
         {
             var meshName = this.GetMeshName();
             var volumeNumber = int.Parse(meshName.Split('_')[1]);

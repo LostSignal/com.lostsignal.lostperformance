@@ -61,15 +61,12 @@ namespace Lost
 
         protected override void OnValidate()
         {
-            base.OnValidate();
-
             if (this.objectOptimizerSettings == null)
             {
                 // TODO [bgish]: Get the default settings from project settings, not hard coded
                 this.objectOptimizerSettings = EditorUtil.GetAssetByGuid<ObjectOptimizerSettings>("9026b0cfb0d3e9a4d95fd0c8697ec701");
             }
 
-            #if UNITY_EDITOR
             if (this.outputFolder == null)
             {
                 var fileNameNoExtension = Path.GetFileNameWithoutExtension(this.gameObject.scene.path);
@@ -78,10 +75,11 @@ namespace Lost
                 DirectoryUtil.CreateFolder(outputPath);
                 this.outputFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(outputPath);
             }
-            #endif
+
+            base.OnValidate();
         }
-        
-        protected override string GetMeshDirectory() => AssetDatabase.GetAssetPath(this.outputFolder);
+
+        public override string GetMeshDirectory() => AssetDatabase.GetAssetPath(this.outputFolder);
 
         private void OptimizeBoxColliders()
         {

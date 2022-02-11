@@ -32,24 +32,36 @@ namespace Lost
         {
             base.OnInspectorGUI();
 
-            if (this.targets?.Length > 1)
+            // Collecting Optimized LODs)
+            var optimzedLODs = new List<OptimizedLOD>();
+
+            foreach (var target in this.targets.Select(x => x as ObjectOptimizer))
             {
-                GUILayout.Space(20.0f);
-                this.DrawMultiSelectUI();
-                GUILayout.Space(20.0f);
-                OptimizerEditorUtil.DrawLODButtons(this.targets.OfType<Optimizer>().ToList(), true);
-            }
-            else
-            {
-                GUILayout.Space(20.0f);
-                this.DrawSingleSelectUI();
-                GUILayout.Space(20.0f);
-                OptimizerEditorUtil.DrawLODButtons(new List<Optimizer> { (Optimizer)this.target }, false);
+                optimzedLODs.AddRange(target.GetComponentsInChildren<OptimizedLOD>());
             }
 
+            // Drawing UI
+            bool multiSelect = this.targets?.Length > 1;
+            
+            GUILayout.Space(20.0f);
+                
+            if (multiSelect)
+            {
+                this.DrawMultiSelectUI();
+            }                
+            else
+            {
+                this.DrawSingleSelectUI();
+            }   
+                
+            GUILayout.Space(20.0f);
+            OptimizerEditorUtil.DrawLODButtons(optimzedLODs, multiSelect);
+            
+            // Special UI for play mode
             if (Application.isPlaying)
             {
                 GUILayout.Space(20);
+
                 if (GUILayout.Button("Unload Unused Assets"))
                 {
                     Resources.UnloadUnusedAssets();

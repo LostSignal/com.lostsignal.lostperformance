@@ -9,6 +9,7 @@
 namespace Lost
 {
     using System;
+    using System.Collections;
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
@@ -29,7 +30,45 @@ namespace Lost
             ProjectDefinesHelper.AddOrRemoveDefine("Simplygon.Unity.EditorPlugin", "USING_SIMPLYGON");
         }
 
-        public static void ReduceGameObject(GameObject gameObject, float quality, int lod, SimplygonSettings settings)
+        public static IEnumerable CalculateLODS(List<OptimizedLOD> optimizedLODs)
+        {
+            var startTime = DateTime.Now;
+            int totalJobs = optimizedLODs.Count;
+            int processedJobs = 0;
+
+            var lods = optimizedLODs.Select(x => x.LODIndex).Distinct().ToList();
+
+            foreach (var lod in lods)
+            {
+                var qualities = optimizedLODs.Select(x => x.Quality).Distinct();
+
+                foreach (var quality in qualities)
+                {
+                    var batch = optimizedLODs.Where(x => x.LODIndex == lod && x.Quality == quality).ToList();
+
+                    batch.ForEach(x => {
+                        if (x.State != OptimizeState.Unoptimized)
+                        {
+                            x.Unoptimize();
+                        }
+                    });
+
+                    //// TODO [bgish]: Don't pass in new settings, but do another for loop on distinct settings
+                    ReduceGameObjects(batch.Select(x => x.gameObject).ToList(), quality, new SimplygonSettings());
+
+                    batch.ForEach(x => x.State = OptimizeState.Simplygon);
+                    processedJobs += batch.Count;
+
+                    // TODO [bgish]: Print out a progress
+
+                    yield return null;
+                }
+            }
+
+            SimplygonHelper.DeleteTempSimplygonAssetsFolder();
+        }
+
+        private static void ReduceGameObjects(List<GameObject> gameObjects, float quality, SimplygonSettings settings)
         {
             #if !USING_SIMPLYGON
             SetupSimplygon();
@@ -37,35 +76,165 @@ namespace Lost
 
             //// TODO [bgish]: Filter out and print errors if find Meshes with zero verts/tris
 
-            //// // Creating a single object that will hold copies of the given gameObjects
-            //// string batchObjectName = $"Simplygon LOD{lod} Batch";
-            //// var batchObject = GameObject.Find(batchObjectName);
-            //// if (batchObject == null)
-            //// {
-            ////     batchObject = new GameObject(batchObjectName);
-            ////     batchObject.transform.Reset();
-            //// }
-            //// 
-            //// batchObject.DestroyChildren();
-            //// 
-            //// var objectsToReduce = new List<GameObject>();
-            //// 
-            //// foreach (var gameObject in gameObjects)
-            //// {
-            ////     var copy = GameObject.Instantiate(gameObject, batchObject.transform);
-            ////     copy.name = gameObject.GetInstanceID().ToString();
-            ////     copy.transform.position = gameObject.transform.position;
-            ////     copy.transform.rotation = gameObject.transform.rotation;
-            ////     copy.transform.localScale = gameObject.transform.localScale;
-            ////     
-            ////     objectsToReduce.Add(copy);
-            //// }
+            // Creating a single object that will hold copies of the given gameObjects
+            string batchObjectName = $"Simplygon Batch";
+            var batchObject = GameObject.Find(batchObjectName);
+            if (batchObject == null)
+            {
+                batchObject = new GameObject(batchObjectName);
+                batchObject.transform.Reset();
+            }
+            
+            batchObject.DestroyChildren();
+            
+            var objectsToReduce = new List<GameObject>();
+            
+            foreach (var gameObject in gameObjects)
+            {
+                var copy = GameObject.Instantiate(gameObject, batchObject.transform);
+                copy.name = gameObject.GetInstanceID().ToString();
+                copy.transform.position = gameObject.transform.position;
+                copy.transform.rotation = gameObject.transform.rotation;
+                copy.transform.localScale = gameObject.transform.localScale;
+                
+                objectsToReduce.Add(copy);
+            }
 
             // Sending the batch to Simplygon
             GameObject simplygonOutput = null;
             
-            simplygonOutput = SimplygonReduce(gameObject, quality, settings);
+            simplygonOutput = SimplygonReduce(batchObject, quality, settings);
             
+            if (simplygonOutput == null)
+            {
+                Debug.LogError("Unexcpected error when reducing game objects with Simplygon.");
+                return;
+            }
+
+            // Updating the original game objects list with the new meshes
+            for (int i = 0; i < batchObject.transform.childCount; i++)
+            {
+                var batchChild = batchObject.transform.GetChild(i);
+                var originalInstanceId = int.Parse(batchChild.name);
+                var original = (GameObject)EditorUtility.InstanceIDToObject(originalInstanceId);
+            
+                List<GameObject> simplygonTransforms = new List<GameObject>();
+            
+                // Speical case if there is only 1 object, it's the root
+                if (batchObject.transform.childCount == 1)
+                {
+                    simplygonTransforms.Add(simplygonOutput);
+                }
+                else
+                {
+                    simplygonTransforms = FindChildGameObject(simplygonOutput.transform, batchChild.name);
+                }
+            
+                if (simplygonTransforms.Count == 0)
+                {
+                    Debug.LogError($"Unable to find Simplygon Version of {original.name} with instance id {originalInstanceId}", original);
+                    continue;
+                }
+            
+                if (simplygonTransforms.Count > 1)
+                {
+                    Debug.LogError($"Found too many matching Simplygon Version of {original.name} with instance id {originalInstanceId}", original);
+                    continue;
+                }
+            
+                var simplygon = simplygonTransforms.FirstOrDefault();
+                var originalMeshFilter = original.GetComponent<MeshFilter>();
+                var simplygonMeshFilter = simplygon.GetComponent<MeshFilter>();
+            
+                if (simplygonMeshFilter == null)
+                {
+                    Debug.LogError($"Skipping Object {original.name}, simplygon did not produce a mesh filter for this object.", original);
+                    continue;
+                }
+
+                //// // -----------------------------
+                //// 
+                //// 
+                //// var originalMeshFilter = gameObject.GetComponent<MeshFilter>();
+                //// var originalSharedMesh = originalMeshFilter.sharedMesh;
+                //// var originalMeshName = originalSharedMesh.name;
+                //// var originalMeshAssetPath = AssetDatabase.GetAssetPath(originalSharedMesh);
+                //// var originalMeshFullPath = Path.GetFullPath(originalMeshAssetPath);
+                //// Debug.Log("originalMeshFullPath = " + originalMeshFullPath);
+                //// 
+                //// var simplygonMeshFilter = simplygonOutput.GetComponent<MeshFilter>();
+                //// var simplygonSharedMesh = simplygonMeshFilter.sharedMesh;
+                //// var simplygonMeshName = simplygonSharedMesh.name;
+                //// var simplygonMeshAssetPath = AssetDatabase.GetAssetPath(simplygonSharedMesh);
+                //// var simplygonMeshFullPath = Path.GetFullPath(simplygonMeshAssetPath);
+                //// Debug.Log("simplygonMeshFullPath = " + simplygonMeshFullPath);
+                //// 
+                //// string simplygonText = File.ReadAllText(simplygonMeshFullPath)
+                ////     .Replace(simplygonMeshName, originalMeshName);
+                //// 
+                //// File.WriteAllText(originalMeshFullPath, simplygonText);
+                //// AssetDatabase.ImportAsset(originalMeshAssetPath);
+                //// 
+                //// // -----------------------------
+
+                // Copying the simplygon version 
+                var simplygonMesh = simplygonMeshFilter.sharedMesh;
+                var originalMesh = originalMeshFilter.sharedMesh;
+                var originalName = originalMesh.name;
+            
+                originalMesh.Clear();
+                EditorUtility.CopySerialized(simplygonMesh, originalMesh);
+                
+                originalMesh.name = originalName;
+            
+                //// EditorUtil.SetDirty(originalMesh);
+                //// 
+                //// 
+                //// var newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(simplygonMesh);
+                //// var meshCopy = GameObject.Instantiate(newMesh);
+                //// meshCopy.name = originalMeshFilter.sharedMesh.name;
+                //// 
+                //// EditorApplication.delayCall += () =>
+                //// {
+                ////     originalMeshFilter.sharedMesh = meshCopy;
+                ////     EditorUtility.SetDirty(originalMeshFilter.gameObject);
+                //// };
+            }
+
+            // Destorying generated game objects
+            // GameObject.DestroyImmediate(batchObject);
+            // GameObject.DestroyImmediate(simplygonOutput);
+
+            List<GameObject> FindChildGameObject(Transform parent, string childToFind)
+            {
+                List<GameObject> children = new List<GameObject>();
+            
+                for (int i = 0; i < parent.childCount; i++)
+                {
+                    var child = parent.GetChild(i);
+            
+                    if (childToFind.EndsWith(child.name.Replace("_", string.Empty)))
+                    {
+                        children.Add(child.gameObject);
+                    }
+                }
+            
+                return children;
+            }
+            #endif
+        }
+
+        public static void ReduceGameObject(GameObject gameObject, float quality, int lod, SimplygonSettings settings)
+        {
+#if !USING_SIMPLYGON
+            SetupSimplygon();
+#else
+
+            // Sending the batch to Simplygon
+            GameObject simplygonOutput = null;
+
+            simplygonOutput = SimplygonReduce(gameObject, quality, settings);
+
             if (simplygonOutput == null)
             {
                 Debug.LogError("Unexcpected error when reducing game objects with Simplygon.");
@@ -91,92 +260,10 @@ namespace Lost
 
             File.WriteAllText(originalMeshFullPath, simplygonText);
             AssetDatabase.ImportAsset(originalMeshAssetPath);
-                        
-            //// // Updating the original game objects list with the new meshes
-            //// for (int i = 0; i < batchObject.transform.childCount; i++)
-            //// {
-            ////     var batchChild = batchObject.transform.GetChild(i);
-            ////     var originalInstanceId = int.Parse(batchChild.name);
-            ////     var original = (GameObject)EditorUtility.InstanceIDToObject(originalInstanceId);
-            //// 
-            ////     List<GameObject> simplygonTransforms = new List<GameObject>();
-            //// 
-            ////     // Speical case if there is only 1 object, it's the root
-            ////     if (batchObject.transform.childCount == 1)
-            ////     {
-            ////         simplygonTransforms.Add(simplygonOutput);
-            ////     }
-            ////     else
-            ////     {
-            ////         simplygonTransforms = FindChildGameObject(simplygonOutput.transform, batchChild.name);
-            ////     }
-            //// 
-            ////     if (simplygonTransforms.Count == 0)
-            ////     {
-            ////         Debug.LogError($"Unable to find Simplygon Version of {original.name} with instance id {originalInstanceId}", original);
-            ////         continue;
-            ////     }
-            //// 
-            ////     if (simplygonTransforms.Count > 1)
-            ////     {
-            ////         Debug.LogError($"Found too many matching Simplygon Version of {original.name} with instance id {originalInstanceId}", original);
-            ////         continue;
-            ////     }
-            //// 
-            ////     var simplygon = simplygonTransforms.FirstOrDefault();
-            ////     var originalMeshFilter = original.GetComponent<MeshFilter>();
-            ////     var simplygonMeshFilter = simplygon.GetComponent<MeshFilter>();
-            //// 
-            ////     if (simplygonMeshFilter == null)
-            ////     {
-            ////         Debug.LogError($"Skipping Object {original.name}, simplygon did not produce a mesh filter for this object.", original);
-            ////         continue;
-            ////     }
-            //// 
-            ////     // Copying the simplygon version 
-            ////     var simplygonMesh = simplygonMeshFilter.sharedMesh;
-            ////     var originalMesh = originalMeshFilter.sharedMesh;
-            ////     var originalName = originalMesh.name;
-            //// 
-            ////     EditorUtility.CopySerialized(simplygonMesh, originalMesh);
-            ////     
-            ////     originalMesh.name = originalName;
-            //// 
-            ////     //// EditorUtil.SetDirty(originalMesh);
-            ////     //// 
-            ////     //// 
-            ////     //// var newMesh = AssetDatabase.LoadAssetAtPath<Mesh>(simplygonMesh);
-            ////     //// var meshCopy = GameObject.Instantiate(newMesh);
-            ////     //// meshCopy.name = originalMeshFilter.sharedMesh.name;
-            ////     //// 
-            ////     //// EditorApplication.delayCall += () =>
-            ////     //// {
-            ////     ////     originalMeshFilter.sharedMesh = meshCopy;
-            ////     ////     EditorUtility.SetDirty(originalMeshFilter.gameObject);
-            ////     //// };
-            //// }
 
             // Destorying generated game objects
-            //// GameObject.DestroyImmediate(batchObject);
             GameObject.DestroyImmediate(simplygonOutput);
-
-            //// List<GameObject> FindChildGameObject(Transform parent, string childToFind)
-            //// {
-            ////     List<GameObject> children = new List<GameObject>();
-            //// 
-            ////     for (int i = 0; i < parent.childCount; i++)
-            ////     {
-            ////         var child = parent.GetChild(i);
-            //// 
-            ////         if (childToFind.EndsWith(child.name.Replace("_", string.Empty)))
-            ////         {
-            ////             children.Add(child.gameObject);
-            ////         }
-            ////     }
-            //// 
-            ////     return children;
-            //// }
-            #endif
+#endif
         }
 
         private static void SetupSimplygon()

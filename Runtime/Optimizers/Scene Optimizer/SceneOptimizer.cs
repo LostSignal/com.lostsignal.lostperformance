@@ -126,6 +126,8 @@ namespace Lost
             {
                 volume.Revert();
             }
+
+            EditorUtil.SetDirty(this.gameObject);
         }
     
         public void GenerateLODs()
@@ -143,6 +145,8 @@ namespace Lost
                 var volumeOptimizer = volumeGameObject.AddComponent<VolumeOptimizer>();
                 volumeOptimizer.Optimize(volume.MeshRendererInfos.ToList(), this.sceneOptimizerSettings);
                 this.volumeOptimizers.Add(volumeOptimizer);
+
+                EditorUtil.SetDirty(volumeGameObject);
             }
         }
 

@@ -101,7 +101,7 @@ namespace Lost
 
             if (octreeExists && volumeOptimizersExist)
             {
-                OptimizerEditorUtil.DrawLODButtons(this.SceneOptimizer.VolumeOptimizers.OfType<Optimizer>().ToList(), true);
+                OptimizerEditorUtil.DrawLODButtons(this.SceneOptimizer.GetComponentsInChildren<OptimizedLOD>().ToList(), true);
             }
 
             if (Application.isPlaying)

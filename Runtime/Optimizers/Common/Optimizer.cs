@@ -7,7 +7,32 @@
 namespace Lost
 {
     using System.Collections.Generic;
+    using System.Linq;
     using UnityEngine;
+
+    public enum OptimizeState
+    {
+        Unoptimized,
+        Simplygon,
+        UnityMeshSimplifier,
+    }
+
+    // When we bake a mesh, save hash value (meshRenderer.count + positions + rotations + scales)
+
+    // Need some sort of a Hide/Show and Calculate Dirty
+    // Hide Scene Optimizer (disbables all Volumes and puts scene mesh renderes back to normal)
+    // Make your edits
+    // Show Scene Optimizer (disable scene volumes, calculate bake hash, if it's changed, then move state back to needs calculating)
+
+    // VolumeOptizer Editor
+    //   LOD0/1/2 Stats
+    //   Calculate LOD1 [none] [simplygon] [ums]
+    //   Calculate LOD2 [none] [simplygon] [ums]
+
+    // OptimizedLOD Editor
+    //   [none] [simplygon] [ums]
+    //   Show Unoptimzed Stats vs Optimized
+    //   Show Mesh Preview
 
     public abstract class Optimizer : MonoBehaviour
     {
@@ -15,35 +40,14 @@ namespace Lost
 
         #pragma warning disable 0649
         [Header("Optimizer")]
-        [ReadOnly] [SerializeField] private List<int> lodsToCalculate;
         [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos;
-        [ReadOnly] [SerializeField] private List<GameObject> lods;
         [ReadOnly] [SerializeField] private OptimizerSettings settings;
         [ReadOnly] [SerializeField] private bool isOptimized;
-
-        [SerializeField] private bool overwriteUnityMeshSimplifierSettings;
-        [SerializeField] private UnityMeshSimplifierSettings unityMeshSimplifierSettings;
-
-        [SerializeField] private bool overwriteSimplygonSettings;
-        [SerializeField] private SimplygonSettings simplygonSettings;
         #pragma warning restore 0649
 
-        public enum Method
-        {
-            Unoptimized,
-            Simplygon,
-            UnityMeshSimplifier,
-        }
+        public OptimizerSettings Settings => this.settings;
 
-        public int LODSToCalculateCount => this.lodsToCalculate == null ? 0 : this.lodsToCalculate.Count;
-
-        public List<int> LODSToCalculate 
-        { 
-            get => this.lodsToCalculate;
-            protected set => this.lodsToCalculate = value;
-        }
-        
-        public List<GameObject> LODs => this.lods;
+        public List<MeshRendererInfo> MeshRendererInfos => this.meshRendererInfos;
 
         public bool IsOptimized => this.isOptimized;
 
@@ -59,61 +63,84 @@ namespace Lost
             this.meshRendererInfos = meshRendererInfos;
             this.settings = settings;
 
-            // Generating unoptimized verions of each LOD
-            for (int i = 0; i < settings.LODSettings.Count; i++)
-            {
-                OptimizeLOD(i, Method.Unoptimized);
-            }
+            this.OnValidate();
 
-            // Updating LODs List
-            this.lods.Clear();
-            
-            var lods = MeshCombiner.GetLODsTransform(this.transform, false);
-            for (int i = 0; i < lods.childCount; i++)
-            {
-                this.lods.Add(lods.GetChild(i).gameObject);
-            }
-            
             this.isOptimized = true;
         }
 
-        public void OptimizeLOD(int lod, Method method)
+        protected virtual void OnValidate()
         {
-            var lodTransform = MeshCombiner.GetLODTransform(this.transform, this.settings.LODSettings, lod);
-
-            if (method == Method.Unoptimized || this.lodsToCalculate.Contains(lod) == false)
+            if (this.settings == null || this.meshRendererInfos == null)
             {
-                MeshCombiner.CreateLOD(this.transform, this.settings.LODSettings, this.meshRendererInfos, this.settings.GenerateLODGroup, this.GetMeshName(), this.GetMeshDirectory(), lod);
-                
-                if (lod != 0)
+                return;
+            }
+
+            // Creating all LODs
+            var validLODs = new List<GameObject>();
+            var lods = this.transform.FindOrCreateChild("LODS", typeof(OptimizedLODGroup));
+            lods.gameObject.GetOrAddComponent<OptimizedLODGroup>();
+
+            foreach (var lodSettings in this.settings.LODSettings)
+            {
+                var lodTransform = lods.FindOrCreateChild(lodSettings.Name, typeof(MeshFilter), typeof(MeshRenderer), typeof(OptimizedLOD));
+                var optimizedLOD = lodTransform.gameObject.GetOrAddComponent<OptimizedLOD>();
+                optimizedLOD.Initialize();
+
+                validLODs.Add(optimizedLOD.gameObject);
+            }
+
+            // Removing any non-valid lod children
+            for (int i = lods.childCount - 1; i >= 0; i--)
+            {
+                var child = lods.GetChild(i).gameObject;
+
+                if (validLODs.Contains(child) == false)
                 {
-                    this.lodsToCalculate.Add(lod);
+                    GameObject.DestroyImmediate(child);
                 }
             }
-            
-            if (method == Method.UnityMeshSimplifier)
-            {
-                var settings = this.overwriteUnityMeshSimplifierSettings ? 
-                    this.unityMeshSimplifierSettings : 
-                    this.settings.UnityMeshSimplifierSettings;
 
-                ReduceGameObjectWithUnityMeshSimplifier(lodTransform.gameObject, this.GetQuality(lod), settings);
-                this.lodsToCalculate.Remove(lod);
-            }
-            else if (method == Method.Simplygon)
-            {
-                var settings = this.overwriteSimplygonSettings ? 
-                    this.simplygonSettings : 
-                    this.settings.SimplygonSettings;
-
-                SimplygonHelper.ReduceGameObject(lodTransform.gameObject, this.GetQuality(lod), lod, settings);
-                this.lodsToCalculate.Remove(lod);
-            }
-            else if (method != Method.Unoptimized)
-            {
-                Debug.LogError($"Unknown Method {method} found!");
-            }
+            // Updating the LODGroup
+            lods.GetComponent<OptimizedLODGroup>().UpdateLODGroup();
         }
+
+        //// public void OptimizeLOD(int lod, Method method)
+        //// {
+        ////     var lodTransform = MeshCombiner.GetLODTransform(this.transform, this.settings.LODSettings, lod);
+        //// 
+        ////     if (method == Method.Unoptimized || this.lodsToCalculate.Contains(lod) == false)
+        ////     {
+        ////         MeshCombiner.CreateLOD(this.transform, this.settings.LODSettings, this.meshRendererInfos, this.settings.GenerateLODGroup, this.GetMeshName(), this.GetMeshDirectory(), lod);
+        ////         
+        ////         if (lod != 0)
+        ////         {
+        ////             this.lodsToCalculate.Add(lod);
+        ////         }
+        ////     }
+        ////     
+        ////     if (method == Method.UnityMeshSimplifier)
+        ////     {
+        ////         var settings = this.overwriteUnityMeshSimplifierSettings ? 
+        ////             this.unityMeshSimplifierSettings : 
+        ////             this.settings.UnityMeshSimplifierSettings;
+        //// 
+        ////         ReduceGameObjectWithUnityMeshSimplifier(lodTransform.gameObject, this.GetQuality(lod), settings);
+        ////         this.lodsToCalculate.Remove(lod);
+        ////     }
+        ////     else if (method == Method.Simplygon)
+        ////     {
+        ////         var settings = this.overwriteSimplygonSettings ? 
+        ////             this.simplygonSettings : 
+        ////             this.settings.SimplygonSettings;
+        //// 
+        ////         SimplygonHelper.ReduceGameObject(lodTransform.gameObject, this.GetQuality(lod), lod, settings);
+        ////         this.lodsToCalculate.Remove(lod);
+        ////     }
+        ////     else if (method != Method.Unoptimized)
+        ////     {
+        ////         Debug.LogError($"Unknown Method {method} found!");
+        ////     }
+        //// }
 
         public virtual void Revert()
         {
@@ -142,27 +169,9 @@ namespace Lost
             }
         }
 
-        protected virtual void OnValidate()
-        {
-            if (this.lodsToCalculate == null)
-            {
-                this.lodsToCalculate = new List<int>();
-            }
+        public virtual string GetMeshName() => this.name;
 
-            if (this.meshRendererInfos == null)
-            {
-                this.meshRendererInfos = new List<MeshRendererInfo>();
-            }
-
-            if (this.lods == null)
-            {
-                this.lods = new List<GameObject>();
-            }
-        }
-
-        protected virtual string GetMeshName() => this.name;
-
-        protected abstract string GetMeshDirectory();
+        public abstract string GetMeshDirectory();
 
         private void RevertMeshRendererOptimization()
         {
@@ -182,56 +191,6 @@ namespace Lost
             }
         }
 
-        private void ReduceGameObjectWithUnityMeshSimplifier(GameObject gameObject, float quality, UnityMeshSimplifierSettings settings)
-        {
-            #if USING_UNITY_MESH_SIMPLIFIER
-            var existingMeshFilter = gameObject.GetComponent<MeshFilter>();
-            var existingMesh = existingMeshFilter.sharedMesh;
-            var existingMeshName = existingMesh.name;
-
-            var options = new UnityMeshSimplifier.SimplificationOptions
-            {
-                Agressiveness = settings.Agressiveness,
-                EnableSmartLink = settings.EnableSmartLink,
-                ManualUVComponentCount = settings.ManualUVComponentCount,
-                MaxIterationCount = settings.MaxIterationCount,
-                PreserveBorderEdges = settings.PreserveBorderEdges,
-                PreserveSurfaceCurvature = settings.PreserveSurfaceCurvature,
-                PreserveUVFoldoverEdges = settings.PreserveUVFoldoverEdges,
-                PreserveUVSeamEdges = settings.PreserveUVSeamEdges,
-                UVComponentCount = settings.UVComponentCount,
-                VertexLinkDistance = settings.VertexLinkDistance,
-            };
-
-            var meshSimplifier = new UnityMeshSimplifier.MeshSimplifier();
-            meshSimplifier.SimplificationOptions = options;
-            meshSimplifier.Initialize(existingMesh);
-            meshSimplifier.SimplifyMesh(quality);
-
-            var newMesh = meshSimplifier.ToMesh();
-            newMesh.RecalculateNormals();
-            newMesh.Optimize();
-            newMesh.name = existingMeshName;
-
-            existingMesh.Clear();
-            UnityEditor.EditorUtility.CopySerialized(newMesh, existingMesh);
-
-            #else
-            
-            var add = UnityEditor.EditorUtility.DisplayDialog(
-                "Add Unity Mesh Simplifier Package?", 
-                "Could not find the Unity Mesh Simplifier Package.\nWould you like to add that now?", 
-                "Yes", 
-                "No");
-
-            if (add)
-            {
-                PackageManagerUtil.AddGitPackage("com.whinarn.unitymeshsimplifier", "https://github.com/Whinarn/UnityMeshSimplifier.git#v3.0.1");
-            }
-
-            #endif
-        }
-        
-        #endif
+#endif
     }
 }
