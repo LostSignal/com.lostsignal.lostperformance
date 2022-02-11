@@ -6,12 +6,14 @@
 
 namespace Lost
 {
+    using System;
     using System.Collections.Generic;
     using System.Linq;
     using UnityEngine;
 
     public enum OptimizeState
     {
+        None,
         Unoptimized,
         Simplygon,
         UnityMeshSimplifier,
@@ -104,44 +106,6 @@ namespace Lost
             lods.GetComponent<OptimizedLODGroup>().UpdateLODGroup();
         }
 
-        //// public void OptimizeLOD(int lod, Method method)
-        //// {
-        ////     var lodTransform = MeshCombiner.GetLODTransform(this.transform, this.settings.LODSettings, lod);
-        //// 
-        ////     if (method == Method.Unoptimized || this.lodsToCalculate.Contains(lod) == false)
-        ////     {
-        ////         MeshCombiner.CreateLOD(this.transform, this.settings.LODSettings, this.meshRendererInfos, this.settings.GenerateLODGroup, this.GetMeshName(), this.GetMeshDirectory(), lod);
-        ////         
-        ////         if (lod != 0)
-        ////         {
-        ////             this.lodsToCalculate.Add(lod);
-        ////         }
-        ////     }
-        ////     
-        ////     if (method == Method.UnityMeshSimplifier)
-        ////     {
-        ////         var settings = this.overwriteUnityMeshSimplifierSettings ? 
-        ////             this.unityMeshSimplifierSettings : 
-        ////             this.settings.UnityMeshSimplifierSettings;
-        //// 
-        ////         ReduceGameObjectWithUnityMeshSimplifier(lodTransform.gameObject, this.GetQuality(lod), settings);
-        ////         this.lodsToCalculate.Remove(lod);
-        ////     }
-        ////     else if (method == Method.Simplygon)
-        ////     {
-        ////         var settings = this.overwriteSimplygonSettings ? 
-        ////             this.simplygonSettings : 
-        ////             this.settings.SimplygonSettings;
-        //// 
-        ////         SimplygonHelper.ReduceGameObject(lodTransform.gameObject, this.GetQuality(lod), lod, settings);
-        ////         this.lodsToCalculate.Remove(lod);
-        ////     }
-        ////     else if (method != Method.Unoptimized)
-        ////     {
-        ////         Debug.LogError($"Unknown Method {method} found!");
-        ////     }
-        //// }
-
         public virtual void Revert()
         {
             if (this.isOptimized)
@@ -158,6 +122,9 @@ namespace Lost
                 this.CleanUpOptimizedMeshRenderers();
                 MeshCombiner.DeleteEmptyOrDisabledGameObjects(this.transform);
                 DestroyImmediate(this);
+
+                Array.ForEach(this.GetComponentsInChildren<OptimizedLOD>(), x => GameObject.DestroyImmediate(x));
+                Array.ForEach(this.GetComponentsInChildren<OptimizedLODGroup>(), x => GameObject.DestroyImmediate(x));
             }
         }
 

@@ -14,7 +14,6 @@ namespace Lost
         #pragma warning disable 0649
         [ReadOnly] [SerializeField] private int lodIndex;
         [ReadOnly] [SerializeField] private OptimizeState state;
-        [ReadOnly] [SerializeField] private bool isInitialized;
 
         [SerializeField] private bool overrideSimplygonSettings;
         [SerializeField] private bool overrideUnityMeshSimplifierSettings;
@@ -44,10 +43,31 @@ namespace Lost
 
         public void Initialize()
         {
-            if (this.isInitialized == false)
+            if (this.state == OptimizeState.None)
             {
-                this.isInitialized = true;
                 this.Unoptimize();
+            }
+
+            if (this.Optimizer == null)
+            {
+                return;
+            }
+
+            var lodSettings = this.OptimizerSettings.LODSettings;
+            var lodSetting = lodSettings.FirstOrDefault(x => x.Name == this.name);
+
+            if (lodSetting != null)
+            {
+                int index = lodSettings.IndexOf(lodSetting);
+
+                if (this.lodIndex != index)
+                {
+                    this.lodIndex = index;
+                }
+            }
+            else
+            {
+                Debug.LogError("Unable to find LOD Index", this);
             }
         }
 
@@ -59,17 +79,7 @@ namespace Lost
 
         private void OnValidate()
         {
-            var settings = this.OptimizerSettings;
-            var lodSetting = settings.LODSettings.FirstOrDefault(x => x.Name == this.name);
-
-            if (lodSetting != null)
-            {
-                this.lodIndex = settings.LODSettings.IndexOf(lodSetting);
-            }
-            else
-            {
-                Debug.LogError("Unable to find LOD Index", this);
-            }
+            this.Initialize();
         }
     }
 }

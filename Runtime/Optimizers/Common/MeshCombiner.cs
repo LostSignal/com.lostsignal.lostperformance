@@ -67,8 +67,6 @@ namespace Lost
             var newMeshName = $"{meshName}_LOD{lodIndex}";
             CreateCombinedMeshGameObject(lodTransform, optimizer.MeshRendererInfos, lodIndex, newMeshName, meshDir);
 
-            optimizedLOD.GetComponentInParent<OptimizedLODGroup>().UpdateLODGroup();
-
             // // Disabling all affected LODGroups
             // UpdateLODGroups(meshRendererInfos, false);
         }
