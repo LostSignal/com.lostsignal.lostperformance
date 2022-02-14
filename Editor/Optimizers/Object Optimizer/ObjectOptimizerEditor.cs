@@ -30,19 +30,14 @@ namespace Lost
 
         public override void OnInspectorGUI()
         {
-            base.OnInspectorGUI();
-
-            // Collecting Optimized LODs)
-            var optimzedLODs = new List<OptimizedLOD>();
-
-            foreach (var target in this.targets.Select(x => x as ObjectOptimizer))
-            {
-                optimzedLODs.AddRange(target.GetComponentsInChildren<OptimizedLOD>());
-            }
-
-            // Drawing UI
             bool multiSelect = this.targets?.Length > 1;
+
+            if (multiSelect == false)
+            {
+                base.OnInspectorGUI();
+            }
             
+            // Drawing UI            
             GUILayout.Space(20.0f);
                 
             if (multiSelect)
@@ -52,8 +47,17 @@ namespace Lost
             else
             {
                 this.DrawSingleSelectUI();
-            }   
-                
+            }
+
+            // Collecting Optimized LODs
+            var optimzedLODs = new List<OptimizedLOD>();
+
+            foreach (var target in this.targets.Select(x => x as ObjectOptimizer).Where(x => x.IsOptimized))
+            {
+                optimzedLODs.AddRange(target.GetComponentsInChildren<OptimizedLOD>());
+            }
+
+            // Drawing Buttons
             GUILayout.Space(20.0f);
             OptimizerEditorUtil.DrawLODButtons(optimzedLODs, multiSelect);
             

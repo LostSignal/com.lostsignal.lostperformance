@@ -11,6 +11,8 @@ namespace Lost
 
     public class OptimizedLOD : MonoBehaviour
     {
+        #if UNITY_EDITOR
+
         #pragma warning disable 0649
         [ReadOnly] [SerializeField] private int lodIndex;
         [ReadOnly] [SerializeField] private OptimizeState state;
@@ -43,16 +45,12 @@ namespace Lost
 
         public void Initialize()
         {
-            if (this.state == OptimizeState.None)
-            {
-                this.Unoptimize();
-            }
-
             if (this.Optimizer == null)
             {
                 return;
             }
 
+            // Makding sure our LOD Index is set
             var lodSettings = this.OptimizerSettings.LODSettings;
             var lodSetting = lodSettings.FirstOrDefault(x => x.Name == this.name);
 
@@ -69,6 +67,12 @@ namespace Lost
             {
                 Debug.LogError("Unable to find LOD Index", this);
             }
+
+            // Making sure mesh is set
+            if (this.state == OptimizeState.None)
+            {
+                this.Unoptimize();
+            }
         }
 
         public void Unoptimize()
@@ -79,7 +83,15 @@ namespace Lost
 
         private void OnValidate()
         {
+            // OnValidate gets called in instantiating in editor, make sure we have a parent Optimizer 
+            if (this.Optimizer == null)
+            {
+                return;
+            }
+
             this.Initialize();
         }
+
+        #endif
     }
 }

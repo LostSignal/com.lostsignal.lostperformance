@@ -11,6 +11,8 @@ namespace Lost
     public class VolumeOptimizer : Optimizer
     {
         #if UNITY_EDITOR
+        
+        public override OptimizerSettings Settings => this.GetComponentInParent<SceneOptimizer>().Settings;
 
         public override string GetMeshDirectory()
         {

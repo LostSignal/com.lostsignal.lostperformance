@@ -12,6 +12,8 @@ namespace Lost
 
     public class OptimizedLODGroup : MonoBehaviour
     {
+        #if UNITY_EDITOR
+
         public Optimizer Optimizer => this.GetComponentInParent<Optimizer>();
 
         public OptimizerSettings OptimizerSettings => this.Optimizer.Settings;
@@ -74,5 +76,7 @@ namespace Lost
                 return false;
             }
         }
+
+        #endif
     }
 }

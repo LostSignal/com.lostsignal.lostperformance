@@ -19,23 +19,6 @@ namespace Lost
         UnityMeshSimplifier,
     }
 
-    // When we bake a mesh, save hash value (meshRenderer.count + positions + rotations + scales)
-
-    // Need some sort of a Hide/Show and Calculate Dirty
-    // Hide Scene Optimizer (disbables all Volumes and puts scene mesh renderes back to normal)
-    // Make your edits
-    // Show Scene Optimizer (disable scene volumes, calculate bake hash, if it's changed, then move state back to needs calculating)
-
-    // VolumeOptizer Editor
-    //   LOD0/1/2 Stats
-    //   Calculate LOD1 [none] [simplygon] [ums]
-    //   Calculate LOD2 [none] [simplygon] [ums]
-
-    // OptimizedLOD Editor
-    //   [none] [simplygon] [ums]
-    //   Show Unoptimzed Stats vs Optimized
-    //   Show Mesh Preview
-
     public abstract class Optimizer : MonoBehaviour
     {
         #if UNITY_EDITOR
@@ -43,19 +26,16 @@ namespace Lost
         #pragma warning disable 0649
         [Header("Optimizer")]
         [ReadOnly] [SerializeField] private List<MeshRendererInfo> meshRendererInfos;
-        [ReadOnly] [SerializeField] private OptimizerSettings settings;
         [ReadOnly] [SerializeField] private bool isOptimized;
         #pragma warning restore 0649
 
-        public OptimizerSettings Settings => this.settings;
+        public abstract OptimizerSettings Settings { get; }
 
         public List<MeshRendererInfo> MeshRendererInfos => this.meshRendererInfos;
 
         public bool IsOptimized => this.isOptimized;
 
-        public float GetQuality(int lod) => this.settings.LODSettings[lod].Quality;
-
-        public virtual void Optimize(List<MeshRendererInfo> meshRendererInfos, OptimizerSettings settings)
+        public virtual void Optimize(List<MeshRendererInfo> meshRendererInfos)
         {
             if (this.isOptimized)
             {
@@ -63,7 +43,6 @@ namespace Lost
             }
 
             this.meshRendererInfos = meshRendererInfos;
-            this.settings = settings;
 
             this.OnValidate();
 
@@ -72,7 +51,7 @@ namespace Lost
 
         protected virtual void OnValidate()
         {
-            if (this.settings == null || this.meshRendererInfos == null)
+            if (this.meshRendererInfos == null)
             {
                 return;
             }
@@ -82,7 +61,7 @@ namespace Lost
             var lods = this.transform.FindOrCreateChild("LODS", typeof(OptimizedLODGroup));
             lods.gameObject.GetOrAddComponent<OptimizedLODGroup>();
 
-            foreach (var lodSettings in this.settings.LODSettings)
+            foreach (var lodSettings in this.Settings.LODSettings)
             {
                 var lodTransform = lods.FindOrCreateChild(lodSettings.Name, typeof(MeshFilter), typeof(MeshRenderer), typeof(OptimizedLOD));
                 var optimizedLOD = lodTransform.gameObject.GetOrAddComponent<OptimizedLOD>();

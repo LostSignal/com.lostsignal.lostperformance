@@ -143,7 +143,7 @@ namespace Lost
                 volume.GameObject = volumeGameObject;
 
                 var volumeOptimizer = volumeGameObject.AddComponent<VolumeOptimizer>();
-                volumeOptimizer.Optimize(volume.MeshRendererInfos.ToList(), this.sceneOptimizerSettings);
+                volumeOptimizer.Optimize(volume.MeshRendererInfos.ToList());
                 this.volumeOptimizers.Add(volumeOptimizer);
 
                 EditorUtil.SetDirty(volumeGameObject);

@@ -24,15 +24,17 @@ namespace Lost
         [ReadOnly] [SerializeField] private List<MeshCollider> combinedMeshColliders;
         #pragma warning restore 0649
                 
+        public override OptimizerSettings Settings => this.objectOptimizerSettings;
+
         public void Optimize()
         {
             var meshRendererInfos = MeshRendererInfo.GetMeshRendererInfos(new List<GameObject> { this.gameObject });
-            this.Optimize(meshRendererInfos, this.objectOptimizerSettings);
+            this.Optimize(meshRendererInfos);
         }
 
-        public override void Optimize(List<MeshRendererInfo> meshRendererInfos, OptimizerSettings settings)
+        public override void Optimize(List<MeshRendererInfo> meshRendererInfos)
         {
-            base.Optimize(meshRendererInfos, settings);
+            base.Optimize(meshRendererInfos);
             this.OptimizeBoxColliders();
             this.OptimizeMeshColliders();
         }
@@ -74,6 +76,16 @@ namespace Lost
                 var outputPath = Path.Combine(directory, $"{fileNameNoExtension}_Meshes", "Objects").Replace("\\", "/");
                 DirectoryUtil.CreateFolder(outputPath);
                 this.outputFolder = AssetDatabase.LoadAssetAtPath<DefaultAsset>(outputPath);
+            }
+
+            if (this.combinedBoxColliders == null)
+            {
+                this.combinedBoxColliders = new List<BoxCollider>();
+            }
+
+            if (this.combinedMeshColliders == null)
+            {
+                this.combinedMeshColliders = new List<MeshCollider>();
             }
 
             base.OnValidate();
