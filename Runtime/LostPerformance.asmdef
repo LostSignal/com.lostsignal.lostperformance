@@ -14,6 +14,11 @@
     "defineConstraints": [],
     "versionDefines": [
         {
+            "name": "Unity",
+            "expression": "0.0.0",
+            "define": "UNITY"
+        },
+        {
             "name": "com.whinarn.unitymeshsimplifier",
             "expression": "0.0.0",
             "define": "USING_UNITY_MESH_SIMPLIFIER"
