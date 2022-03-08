@@ -6,11 +6,12 @@
   "description": "A collection of performance related code.",
   "keywords": [
     "Lost",
-	"Performace",
-	"Mesh Combine"
+    "Performace",
+    "Mesh Combine"
   ],
   "category": "",
   "dependencies": {
+    "com.unity.editorcoroutines": "1.0.0"
   },
   "type": "library"
 }

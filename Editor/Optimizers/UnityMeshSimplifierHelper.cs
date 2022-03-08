@@ -10,6 +10,7 @@ namespace Lost
     using System.Collections;
     using System.Collections.Generic;
     using Unity.EditorCoroutines.Editor;
+    using UnityEditor;
     using UnityEngine;
 
     public static class UnityMeshSimplifierHelper
