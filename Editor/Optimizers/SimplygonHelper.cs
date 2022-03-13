@@ -26,7 +26,10 @@ namespace Lost
     {
         static SimplygonHelper()
         {
-            ProjectDefinesHelper.AddOrRemoveDefine("Simplygon.Unity.EditorPlugin", "USING_SIMPLYGON");
+            EditorApplication.delayCall += () =>
+            {
+                ProjectDefinesHelper.AddOrRemoveDefine("Simplygon.Unity.EditorPlugin", "USING_SIMPLYGON");
+            };
         }
 
         #if !USING_SIMPLYGON
