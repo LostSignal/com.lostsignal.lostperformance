@@ -32,13 +32,13 @@ namespace Lost
                 this.meshFilters = this.GetComponentsInChildren<MeshFilter>();
                 this.meshGuids = new string[this.meshFilters.Length];
 
-                #if UNITY_EDITOR
+#if UNITY_EDITOR
                 for (int i = 0; i < this.meshFilters.Length; i++)
                 {
                     string path = UnityEditor.AssetDatabase.GetAssetPath(this.meshFilters[i].sharedMesh);
                     this.meshGuids[i] = UnityEditor.AssetDatabase.AssetPathToGUID(path);
                 }
-                #endif
+#endif
             }
         }
 
@@ -99,7 +99,7 @@ namespace Lost
 
         public void SetLODs(List<Mesh> meshes)
         {
-            var lodGroup = this.GetOrAddComponent<LODGroup>();
+            var lodGroup = EditorUtil.GetOrAddComponent<LODGroup>(this);
             var lods = lodGroup.GetLODs();
             bool recalculateLODGroup = false;
 

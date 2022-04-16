@@ -12,7 +12,7 @@ namespace Lost
 
     public class OptimizedLODGroup : MonoBehaviour
     {
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
 
         public Optimizer Optimizer => this.GetComponentInParent<Optimizer>();
 
@@ -34,7 +34,7 @@ namespace Lost
 
             if (lodGroup == null)
             {
-                lodGroup = this.GetOrAddComponent<LODGroup>();
+                lodGroup = EditorUtil.GetOrAddComponent<LODGroup>(this);
             }
 
             var lodGroupLODs = lodGroup.GetLODs();
@@ -46,7 +46,7 @@ namespace Lost
             if (IsLODGroupUpToDate() == false)
             {
                 var lods = new List<LOD>();
-                
+
                 for (int lodIndex = 0; lodIndex < lodSettings.Count; lodIndex++)
                 {
                     lods.Add(new LOD
@@ -55,9 +55,9 @@ namespace Lost
                         renderers = optimizedLODGroups[lodIndex].GetComponentsInChildren<MeshRenderer>().ToArray(),
                     });
                 }
-                
+
                 lodGroup.SetLODs(lods.ToArray());
-                
+
                 EditorUtil.SetDirty(lodGroup.gameObject);
             }
 
@@ -77,6 +77,6 @@ namespace Lost
             }
         }
 
-        #endif
+#endif
     }
 }
