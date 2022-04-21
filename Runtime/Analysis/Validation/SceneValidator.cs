@@ -45,11 +45,11 @@ namespace Lost
 
     public class SceneValidator : MonoBehaviour
     {
-        #if UNITY_EDITOR
+#if UNITY_EDITOR
 
-        #pragma warning disable 0649
+#pragma warning disable 0649
         [SerializeReference] private List<Validator> validators;
-        #pragma warning restore 0649
+#pragma warning restore 0649
 
         public List<Validator> Validators => this.validators;
 
@@ -106,7 +106,7 @@ namespace Lost
                 bool validatorInList = false;
                 foreach (var validator in this.validators)
                 {
-                    if (validator.GetType() == validatorClassType)
+                    if (validator != null && validator.GetType() == validatorClassType)
                     {
                         validatorInList = true;
                         break;
@@ -140,12 +140,12 @@ namespace Lost
         [Serializable]
         public abstract class Validator
         {
-            #pragma warning disable 0649, CA2235
+#pragma warning disable 0649, CA2235
             [ReadOnly]
             [SerializeField] private SceneValidator parent;
             [SerializeField] private bool isActive;
             [SerializeField] private List<GameObject> objectsToIgnore;
-            #pragma warning restore 0649, CA2235
+#pragma warning restore 0649, CA2235
 
             public abstract string DisplayName { get; }
 
@@ -183,7 +183,7 @@ namespace Lost
             }
         }
 
-        #endif
+#endif
     }
 }
 

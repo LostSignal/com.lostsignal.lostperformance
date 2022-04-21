@@ -27,8 +27,13 @@ namespace Lost
             {
                 var validator = sceneValidator.Validators[i];
 
-                using (new FoldoutScope(foldoutId++, validator.DisplayName, out bool visible, out Rect position))
+                using (new FoldoutScope(foldoutId++, validator?.DisplayName ?? "NULL", out bool visible, out Rect position))
                 {
+                    if (validator == null)
+                    {
+                        continue;
+                    }
+
                     // Process Validator Button
                     Rect buttonRect = default;
                     buttonRect.x = position.width - 20;
